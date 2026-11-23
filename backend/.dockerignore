@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.*
+.cache
+.data
+*.log
+src/**/*.test.ts
+src/scripts/e2e-server.ts

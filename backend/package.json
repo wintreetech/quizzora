@@ -1,0 +1,46 @@
+{
+  "name": "@quizora/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:browser-server": "tsx src/scripts/e2e-server.ts",
+    "admin": "tsx src/scripts/admin.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "launch:products": "tsx src/scripts/launch-products.ts",
+    "client:accounts": "tsx src/scripts/client-accounts.ts",
+    "check:client": "tsx src/scripts/check-client.ts",
+    "fx:refresh": "tsx src/scripts/refresh-rates.ts"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "mongodb-memory-server": "^10.2.3",
+    "mongoose": "^8.19.1",
+    "nodemailer": "^10.3.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.9.1",
+    "@types/nodemailer": "^7.0.3",
+    "@types/supertest": "^6.0.3",
+    "prettier": "^3.9.10",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

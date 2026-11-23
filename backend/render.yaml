@@ -1,0 +1,71 @@
+services:
+  - type: web
+    name: quizora-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    numInstances: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: MONGOMS_DISABLE_POSTINSTALL
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_NAME
+        value: quizora
+      - key: APP_ORIGIN
+        sync: false
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: BILLING_ENABLED
+        value: "false"
+      - key: PAYMENTS_ENABLED
+        value: "false"
+      - key: COIN_SYSTEM_ENABLED
+        value: "true"
+      - key: PAID_QUIZZES_ENABLED
+        value: "true"
+      - key: TW_ENVIRONMENT
+        value: live
+      - key: TW_ALLOW_LOCAL_CHECKOUT
+        value: "false"
+      - key: PAID_COMPETITIONS_ENABLED
+        value: "false"
+      - key: PAID_EVENTS_MERCHANT_APPROVED
+        value: "false"
+  - type: web
+    name: quizora-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci --include=dev && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: VITE_API_URL
+        sync: false
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
