@@ -12,6 +12,8 @@ import {
 } from "../models.js";
 import { id, HttpError, rankSort, locked } from "../utils.js";
 import { quizSummary } from "./api.js";
+import { writeQuiz } from "../services/quiz-authoring.js";
+import { getQuizPricing } from "../services/pricing.js";
 import {
   createCompetition,
   competitionState,
@@ -74,47 +76,12 @@ organizer.get("/quizzes/:id", async (req, res) => {
   res.json({ ...quizSummary(q), questions: q.questions });
 });
 organizer.post("/quizzes", async (req, res) => {
-  const data = quizSchema.parse(req.body);
-  const userId = String(req.user._id);
-  const q = await locked(`quiz-limit:${userId}`, async () => {
-    const plan = await Plan.findOne({ key: "organizer" });
-    if (
-      (await Quiz.countDocuments({
-        ownerId: userId,
-        status: { $ne: "archived" },
-      })) >= (plan?.quizLimit ?? 10)
-    )
-      throw new HttpError(
-        403,
-        "Your free organizer quiz limit has been reached.",
-      );
-    return Quiz.create({
-      ...data,
-      ownerId: userId,
-      slug: `quiz-${crypto.randomUUID()}`,
-      version: 1,
-    });
-  });
-  await Audit.create({
-    actorId: userId,
-    action: "quiz.create",
-    targetId: id(q),
-  });
-  res.status(201).json(quizSummary(q));
+  res.status(201).json(quizSummary(await writeQuiz(req.user, req.body)));
 });
 organizer.put("/quizzes/:id", async (req, res) => {
-  const data = quizSchema.parse(req.body);
-  const q = await ownedQuiz(String(req.params.id), req.user);
-  Object.assign(q, data);
-  q.version++;
-  await q.save();
-  await Audit.create({
-    actorId: String(req.user._id),
-    action: "quiz.update",
-    targetId: id(q),
-    details: { version: q.version, status: q.status },
-  });
-  res.json(quizSummary(q));
+  res.json(
+    quizSummary(await writeQuiz(req.user, req.body, String(req.params.id))),
+  );
 });
 organizer.post("/quizzes/:id/duplicate", async (req, res) => {
   const q = await ownedQuiz(String(req.params.id), req.user);
@@ -135,6 +102,9 @@ organizer.post("/quizzes/:id/duplicate", async (req, res) => {
       visibility: q.visibility,
       status: "draft",
       questions: q.questions,
+      pricing: getQuizPricing(q).configured
+        ? { ...q.pricing, version: 1, publishedBy: String(req.user._id) }
+        : undefined,
       ownerId: String(req.user._id),
       slug: `quiz-${crypto.randomUUID()}`,
       version: 1,

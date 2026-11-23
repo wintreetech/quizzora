@@ -51,6 +51,55 @@ export const getPricing = (doc: any) => ({
   ...freePricing,
   ...(doc.pricing || {}),
 });
+// Quiz access must be explicit. The event fallback above remains compatible with
+// historical free rooms; it must never infer the price of a published quiz.
+export function getQuizPricing(doc: any) {
+  const raw = doc?.pricing;
+  const parsed = pricingSchema.safeParse(raw);
+  const configured =
+    parsed.success &&
+    raw &&
+    ["FREE", "FREE_PREVIEW_THEN_PAID", "PAID_PER_ATTEMPT"].includes(
+      raw.accessType,
+    ) &&
+    Number.isSafeInteger(raw.version) &&
+    raw.version >= 0 &&
+    Number.isSafeInteger(raw.includedAttempts) &&
+    Number.isSafeInteger(raw.previewQuestions) &&
+    typeof raw.available === "boolean";
+  if (!configured)
+    return {
+      ...freePricing,
+      accessType: "UNCONFIGURED",
+      configured: false,
+      available: false,
+      issue: "Entry pricing needs administrator review.",
+    };
+  return { ...raw, ...parsed.data, version: raw.version, configured: true };
+}
+export function defaultQuizPricing(source: {
+  seedKey?: string;
+  difficulty?: string;
+}) {
+  const free =
+    ["cosmic", "world"].includes(source.seedKey || "") ||
+    (source.difficulty === "Easy" && source.seedKey?.startsWith("library-v1-"));
+  return {
+    ...freePricing,
+    accessType: free ? "FREE" : "PAID_PER_ATTEMPT",
+    coinPrice: free
+      ? 0
+      : source.difficulty === "Hard"
+        ? 75
+        : source.difficulty === "Easy"
+          ? 25
+          : source.seedKey?.startsWith("library-v1-")
+            ? 25
+            : 50,
+    version: 1,
+    publishedBy: "platform-seed:v2",
+  };
+}
 export const modelFor = (kind: string) =>
   kind === "quiz"
     ? Quiz
@@ -92,7 +141,10 @@ export async function savePricing(
         "Tournament rounds inherit the tournament pass; separate entry prices are not allowed.",
       );
     if (publish) {
-      const version = getPricing(doc).version + 1;
+      const version =
+        (Number.isSafeInteger(doc.pricing?.version) && doc.pricing.version >= 0
+          ? doc.pricing.version
+          : 0) + 1;
       doc.pricing = {
         ...p,
         version,
@@ -126,7 +178,10 @@ export async function savePricing(
       ],
       { session },
     );
-    return { pricing: getPricing(doc), draft: doc.pricingDraft };
+    return {
+      pricing: kind === "quiz" ? getQuizPricing(doc) : getPricing(doc),
+      draft: doc.pricingDraft,
+    };
   });
 }
 export function checkConsent(pricing: any, consent: any) {

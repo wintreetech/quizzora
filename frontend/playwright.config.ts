@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 import { randomBytes } from "node:crypto";
+const frontendPort = process.env.E2E_FRONTEND_PORT || "5175";
+process.env.E2E_FRONTEND_PORT = frontendPort;
 process.env.E2E_ADMIN_PASSWORD ||= randomBytes(24).toString("base64url");
 export default defineConfig({
   globalTeardown: "./tests/teardown.ts",
@@ -9,7 +11,7 @@ export default defineConfig({
   expect: { timeout: 10000 },
   workers: 1,
   use: {
-    baseURL: "http://localhost:5174",
+    baseURL: `http://localhost:${frontendPort}`,
     browserName: "chromium",
     launchOptions: {
       executablePath:
@@ -28,13 +30,13 @@ export default defineConfig({
       timeout: 120000,
       reuseExistingServer: false,
       env: {
-        APP_ORIGIN: "http://localhost:5174",
+        APP_ORIGIN: `http://localhost:${frontendPort}`,
         E2E_ADMIN_PASSWORD: process.env.E2E_ADMIN_PASSWORD,
       },
     },
     {
-      command: "npm run dev -- --port 5174 --strictPort",
-      url: "http://localhost:5174",
+      command: `npm run dev -- --port ${frontendPort} --strictPort`,
+      url: `http://localhost:${frontendPort}`,
       timeout: 30000,
       reuseExistingServer: false,
       env: {

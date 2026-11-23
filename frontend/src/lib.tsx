@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   X,
   Check,
@@ -170,7 +171,9 @@ export function Icon({
   const C = icons[name] || BookOpen;
   return <C size={size} strokeWidth={1.8} aria-hidden="true" {...props} />;
 }
-export const API = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+export const API = (import.meta.env.VITE_API_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -231,6 +234,7 @@ export function SpendConfirmation({
   coinPrice,
   version,
   includedAttempts = 1,
+  questionCount,
   requestKey,
   confirm,
   close,
@@ -240,6 +244,7 @@ export function SpendConfirmation({
   coinPrice: number;
   version: number;
   includedAttempts?: number;
+  questionCount?: number;
   requestKey: string;
   confirm: (consent: any) => Promise<void>;
   close: () => void;
@@ -262,7 +267,10 @@ export function SpendConfirmation({
       </div>
       <span className="eyebrow">YOUR COINS. YOUR CALL.</span>
       <h2>Make this your next round.</h2>
-      <p className="muted">{title}</p>
+      <p className="muted">
+        {title}
+        {questionCount ? ` - ${questionCount} questions` : ""}
+      </p>
       <div className="spend-quote">
         <span>
           {event
@@ -303,6 +311,12 @@ export function SpendConfirmation({
               ? "Your wallet has a payment review hold. Contact support."
               : `You need ${Math.max(0, coinPrice - w.balance)} more coins for this round.`}
           </p>
+          {w.purchasesAvailable === false && !w.reversalHold && (
+            <p className="muted">
+              Coin purchases are currently unavailable. You can choose a free
+              quiz while the merchant connection is completed.
+            </p>
+          )}
           <Link
             className="btn primary full"
             to={`/store?returnTo=${encodeURIComponent(window.location.pathname)}`}
@@ -356,6 +370,7 @@ type ContextType = {
 const Context = createContext<ContextType>(null!);
 export const useApp = () => useContext(Context);
 export function Provider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const client = useQueryClient();
   const { data, isPending } = useQuery({
     queryKey: ["me"],
@@ -371,8 +386,17 @@ export function Provider({ children }: { children: ReactNode }) {
   const afterTour = useRef<(() => void) | undefined>(undefined);
   const [saved, setSaved] = useState<string[]>(() => {
     try {
-      const stored: unknown = JSON.parse(localStorage.getItem("quizora-saved") || "[]");
-      return Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id)).slice(-200) : [];
+      const stored: unknown = JSON.parse(
+        localStorage.getItem("quizora-saved") || "[]",
+      );
+      return Array.isArray(stored)
+        ? stored
+            .filter(
+              (id): id is string =>
+                typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id),
+            )
+            .slice(-200)
+        : [];
     } catch {
       return [];
     }
@@ -401,7 +425,9 @@ export function Provider({ children }: { children: ReactNode }) {
     saved,
     save: (id) => {
       if (!saved.includes(id) && saved.length >= 200) {
-        setMessage("Your collection is full. Unsave a quiz before adding another.");
+        setMessage(
+          "Your collection is full. Unsave a quiz before adding another.",
+        );
         return;
       }
       setSaved((prev) => {
@@ -430,9 +456,13 @@ export function Provider({ children }: { children: ReactNode }) {
                 : "Welcome back. Good to see you.",
             );
             const fresh = client.getQueryData<{ user: User | null }>(["me"]);
-            if (fresh?.user?.onboarding?.required)
-              afterTour.current = after.current;
-            else after.current?.();
+            const next =
+              after.current ||
+              (authMode === "register"
+                ? () => navigate("/dashboard")
+                : undefined);
+            if (fresh?.user?.onboarding?.required) afterTour.current = next;
+            else next?.();
             after.current = undefined;
           }}
         />
@@ -496,7 +526,12 @@ export function Modal({
           box.current?.querySelectorAll<HTMLElement>(
             "button:not(:disabled), input, select, textarea, a[href]",
           ) || [],
-        ).filter((element) => element.getClientRects().length > 0 && !element.hasAttribute("disabled") && element.tabIndex >= 0);
+        ).filter(
+          (element) =>
+            element.getClientRects().length > 0 &&
+            !element.hasAttribute("disabled") &&
+            element.tabIndex >= 0,
+        );
         const first = els[0],
           last = els.at(-1);
         if (e.shiftKey && document.activeElement === first) {

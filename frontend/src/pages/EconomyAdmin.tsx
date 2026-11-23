@@ -170,6 +170,10 @@ export function EconomyAdmin({ section }: { section: string }) {
     client.invalidateQueries({ queryKey: ["economy-analytics"] });
     client.invalidateQueries({ queryKey: ["wallet"] });
     client.invalidateQueries({ queryKey: ["quizzes"] });
+    client.invalidateQueries({ queryKey: ["quiz"] });
+    client.invalidateQueries({ queryKey: ["quiz-access"] });
+    client.invalidateQueries({ queryKey: ["admin"] });
+    client.invalidateQueries({ queryKey: ["edit-quiz"] });
   };
   if (isPending) return <Spinner />;
   if (error) return <ErrorNote message={error.message} />;
@@ -263,42 +267,45 @@ export function EconomyAdmin({ section }: { section: string }) {
       {section === "Coin Packages" && (
         <>
           <StorePricing />
-          <details className="legacy-price-points"><summary>Previous price points · existing orders only</summary>
-          <div className="activation-notice">
-            <Icon name="Shield" size={22} />
-            <p>
-              These previous price points are retained for historical orders. New purchases use the amount-based store pricing above.
+          <details className="legacy-price-points">
+            <summary>Previous price points · existing orders only</summary>
+            <div className="activation-notice">
+              <Icon name="Shield" size={22} />
+              <p>
+                These previous price points are retained for historical orders.
+                New purchases use the amount-based store pricing above.
+              </p>
+            </div>
+            <p className="info-note">
+              Editing these entries does not change new store quotes. Existing
+              orders keep their confirmed amounts.
             </p>
-          </div>
-          <p className="info-note">
-            Editing these entries does not change new store quotes. Existing orders keep their confirmed amounts.
-          </p>
-          <div className="admin-package-grid">
-            {d.items.map((p: any) => (
-              <article className="panel admin-package" key={p.id}>
-                <span className={`badge ${p.active ? "published" : "draft"}`}>
-                  {p.active ? "Active package" : "Not for sale"}
-                </span>
-                <h3>{p.name}</h3>
-                <div className="admin-package-total">
-                  <CoinSymbol size={28} />
-                  <strong>{coinNumber(p.coins + p.bonusCoins)}</strong>
-                  <span>coins</span>
-                </div>
-                <p>{p.description}</p>
-                <div>
-                  <strong>{money(p.amountMinor, p.currency)}</strong>
-                  <span>Version {p.version}</span>
-                </div>
-                <button
-                  className="btn outline full"
-                  onClick={() => setDialog({ type: "package", item: p })}
-                >
-                  Manage package <Icon name="ArrowUpRight" size={18} />
-                </button>
-              </article>
-            ))}
-          </div>
+            <div className="admin-package-grid">
+              {d.items.map((p: any) => (
+                <article className="panel admin-package" key={p.id}>
+                  <span className={`badge ${p.active ? "published" : "draft"}`}>
+                    {p.active ? "Active package" : "Not for sale"}
+                  </span>
+                  <h3>{p.name}</h3>
+                  <div className="admin-package-total">
+                    <CoinSymbol size={28} />
+                    <strong>{coinNumber(p.coins + p.bonusCoins)}</strong>
+                    <span>coins</span>
+                  </div>
+                  <p>{p.description}</p>
+                  <div>
+                    <strong>{money(p.amountMinor, p.currency)}</strong>
+                    <span>Version {p.version}</span>
+                  </div>
+                  <button
+                    className="btn outline full"
+                    onClick={() => setDialog({ type: "package", item: p })}
+                  >
+                    Manage package <Icon name="ArrowUpRight" size={18} />
+                  </button>
+                </article>
+              ))}
+            </div>
           </details>
         </>
       )}
@@ -341,9 +348,11 @@ export function EconomyAdmin({ section }: { section: string }) {
                           name={p.pricing.coinPrice ? "Coins" : "Sparkles"}
                           size={17}
                         />
-                        {p.pricing.coinPrice
-                          ? `${p.pricing.coinPrice} coins`
-                          : "Free"}
+                        {kind === "quiz" && !p.pricing.configured
+                          ? "Pricing under review"
+                          : p.pricing.coinPrice
+                            ? `${p.pricing.coinPrice} coins`
+                            : "Free"}
                       </span>
                       <small>
                         {p.pricing.includedAttempts} included attempt(s)
@@ -743,21 +752,81 @@ export function EconomyAdmin({ section }: { section: string }) {
   );
 }
 function StorePricing() {
-  const client = useQueryClient(), { toast } = useApp();
-  const query = useQuery({ queryKey: ["store-pricing-admin"], queryFn: () => api("/admin/economy/store-pricing") });
-  const [error, setError] = useState(""), [busy, setBusy] = useState(false);
+  const client = useQueryClient(),
+    { toast } = useApp();
+  const query = useQuery({
+    queryKey: ["store-pricing-admin"],
+    queryFn: () => api("/admin/economy/store-pricing"),
+  });
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
   if (query.isPending) return <Spinner />;
   if (query.error) return <ErrorNote message={query.error.message} />;
-  return <form className="panel store-pricing-form" key={query.data.version} onSubmit={async (event) => {
-    event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError("");
-    try {
-      await api("/admin/economy/store-pricing", "PUT", { coinsPerUsd: Number(form.get("coinsPerUsd")), expectedVersion: query.data.version, confirmed: true, reason: form.get("reason") });
-      await client.invalidateQueries({ queryKey: ["store-pricing-admin"] });
-      await client.invalidateQueries({ queryKey: ["coin-purchase-options"] });
-      await client.invalidateQueries({ queryKey: ["budget-quote"] });
-      toast("Store pricing updated. Existing orders retain their confirmed totals.");
-    } catch (failure) { setError((failure as Error).message); } finally { setBusy(false); }
-  }}><span className="eyebrow">STORE PRICING · VERSION {query.data.version}</span><h2>One clear coin rate.</h2><p>Customers choose 10–500 in USD or EUR. EUR coin allocations use the dated ECB currency reference. New orders are validated by the server. Old discount curves are no longer available for new purchases.</p><label>Coins per US dollar<input type="number" name="coinsPerUsd" min={1} max={10000} required defaultValue={query.data.coinsPerUsd} /></label><label>Reason for pricing change<input name="reason" minLength={10} maxLength={500} required /></label><label className="check-label"><input type="checkbox" required />I confirm this rate should apply to new purchases.</label>{error && <ErrorNote message={error} />}<button className="btn primary" disabled={busy}>{busy ? "Saving…" : "Publish store pricing"}</button></form>;
+  return (
+    <form
+      className="panel store-pricing-form"
+      key={query.data.version}
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        setBusy(true);
+        setError("");
+        try {
+          await api("/admin/economy/store-pricing", "PUT", {
+            coinsPerUsd: Number(form.get("coinsPerUsd")),
+            expectedVersion: query.data.version,
+            confirmed: true,
+            reason: form.get("reason"),
+          });
+          await client.invalidateQueries({ queryKey: ["store-pricing-admin"] });
+          await client.invalidateQueries({
+            queryKey: ["coin-purchase-options"],
+          });
+          await client.invalidateQueries({ queryKey: ["budget-quote"] });
+          toast(
+            "Store pricing updated. Existing orders retain their confirmed totals.",
+          );
+        } catch (failure) {
+          setError((failure as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <span className="eyebrow">
+        STORE PRICING · VERSION {query.data.version}
+      </span>
+      <h2>One clear coin rate.</h2>
+      <p>
+        Customers choose 10–500 in USD or EUR. EUR coin allocations use the
+        dated ECB currency reference. New orders are validated by the server.
+        Old discount curves are no longer available for new purchases.
+      </p>
+      <label>
+        Coins per US dollar
+        <input
+          type="number"
+          name="coinsPerUsd"
+          min={1}
+          max={10000}
+          required
+          defaultValue={query.data.coinsPerUsd}
+        />
+      </label>
+      <label>
+        Reason for pricing change
+        <input name="reason" minLength={10} maxLength={500} required />
+      </label>
+      <label className="check-label">
+        <input type="checkbox" required />I confirm this rate should apply to
+        new purchases.
+      </label>
+      {error && <ErrorNote message={error} />}
+      <button className="btn primary" disabled={busy}>
+        {busy ? "Saving…" : "Publish store pricing"}
+      </button>
+    </form>
+  );
 }
 function ConnectGateway({
   initial,
@@ -785,9 +854,20 @@ function ConnectGateway({
       </p>
       <details className="merchant-setup-help">
         <summary>Where do I find these details?</summary>
-        <p>Use your TransactWorld onboarding information. The merchant login is your payment-provider username, not your Quizora email. Partner ID is assigned by TransactWorld and is different from Member ID.</p>
-        <p>If you do not have them, ask your merchant account manager: “Please provide my merchant API username and assigned Partner ID, and confirm access to AuthToken and transaction Inquiry for this environment.”</p>
-        <p>No provider password or card details belong in this form. A successful connection check does not prove a real payment has settled.</p>
+        <p>
+          Use your TransactWorld onboarding information. The merchant login is
+          your payment-provider username, not your Quizora email. Partner ID is
+          assigned by TransactWorld and is different from Member ID.
+        </p>
+        <p>
+          If you do not have them, ask your merchant account manager: “Please
+          provide my merchant API username and assigned Partner ID, and confirm
+          access to AuthToken and transaction Inquiry for this environment.”
+        </p>
+        <p>
+          No provider password or card details belong in this form. A successful
+          connection check does not prove a real payment has settled.
+        </p>
       </details>
       <form
         className="form-stack"
@@ -1163,7 +1243,9 @@ function PriceEditor({
   done: () => void;
 }) {
   const initial = item.draft || item.pricing;
-  const [mode, setMode] = useState(initial.accessType),
+  const [mode, setMode] = useState(
+      initial.accessType === "UNCONFIGURED" ? "" : initial.accessType,
+    ),
     [price, setPrice] = useState(initial.coinPrice),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -1213,12 +1295,16 @@ function PriceEditor({
         <label>
           Access product
           <select
+            required
             value={mode}
             onChange={(e) => {
               setMode(e.target.value);
               if (e.target.value !== "FREE" && price === 0) setPrice(25);
             }}
           >
+            <option value="" disabled>
+              Choose access pricing
+            </option>
             <option value="FREE">Free full access</option>
             {item.kind === "quiz" ? (
               <>

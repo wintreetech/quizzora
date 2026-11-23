@@ -1,5 +1,4 @@
 import { CoinPackage, Quiz, User, Wallet, Settings } from "./models.js";
-import { getPricing } from "./services/pricing.js";
 export async function migrateEconomy() {
   for (const [displayOrder, p] of [
     {
@@ -48,7 +47,8 @@ export async function migrateEconomy() {
   if (!migration) {
     const quizzes = await Quiz.find();
     for (const q of quizzes) {
-      if (!q.pricing) q.pricing = getPricing(q);
+      // Unknown customer prices are reviewed explicitly by the access migration.
+      // Never manufacture a free published price for a quiz with no configuration.
       if (!q.pricingDraft) {
         const coinPrice =
           q.seedKey === "cosmic" || q.seedKey === "world"

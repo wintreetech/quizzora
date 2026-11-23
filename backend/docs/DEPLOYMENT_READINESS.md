@@ -33,7 +33,7 @@ The development embedded replica persists under `backend/.data/mongo`, port 5701
 3. Set the correct `TW_ENVIRONMENT` and only merchant-approved `TW_SUPPORTED_CURRENCIES`. Verify merchant approval for the actual business model and payment methods.
 4. Run actual provider authentication and a provider-supported sandbox payment with real sandbox credentials. This has **not** been executed in this delivery. Automated tests simulate transport only.
 5. Deploy and validate public HTTPS return and notification endpoints under `/api/payments/transactworld/`. Check signatures, amount, currency, merchant reference, independent Inquiry and exactly-once wallet credit. Validate failed/cancelled payments, duplicate callbacks, lost browser returns, refunds/chargebacks and reconciliation against genuine provider records.
-6. Review the versioned coins-per-USD retail rate, 10?500 amount limits, dated EUR reference, legal terms and eligible refund policy with the client. The previous cheap quantity curve and fixed-package endpoints cannot create new orders. Existing confirmed orders retain their snapshots.
+6. Review the versioned coins-per-USD retail rate, 10-500 amount limits, dated EUR reference, legal terms and eligible refund policy with the client. The previous cheap quantity curve and fixed-package endpoints cannot create new orders. Existing confirmed orders retain their snapshots.
 7. Enable `PAYMENTS_ENABLED=true` only when the required merchant setup and actual acceptance tests succeed. The application must continue to reject unavailable/failed authentication.
 8. Coin-entry live events additionally need both `PAID_COMPETITIONS_ENABLED=true` and `PAID_EVENTS_MERCHANT_APPROVED=true`; keep them off until approved.
 
@@ -43,7 +43,9 @@ Provider contract references: [merchant API identity](https://docs.transactworld
 
 ## Data and migrations
 
-Back up the intended database and test a restore before deploying. Startup inserts missing library quizzes by stable seed key using `$setOnInsert`; it does not overwrite client edits or delete quizzes. The new library adds 30 quizzes/120 questions to the original eight/40, and defaults to free access.
+Back up the intended database and test a restore before deploying. Startup inserts missing library quizzes by stable seed key using `$setOnInsert`; it does not overwrite client edits or delete quizzes. The new library adds 30 quizzes/120 questions to the original eight/40, and uses explicit Free/Paid pricing (12 free and 26 paid across the complete platform library).
+
+The guarded quiz-access migration repairs only known untouched platform seeds; preserves explicit customer/Admin prices and purchased attempts; audits repairs once; and flags ambiguous customer prices for review rather than inventing Free.
 
 The economy migration creates missing zero wallets and inactive/unpriced initial price points where necessary, preserves existing active prices, and never rewrites historical purchases. Do not run `launch:products` as an automatic migration: it is an explicit owner-approved initial pricing operation. Its scope is now restricted to the original eight seed identifiers so future library additions cannot accidentally become paid.
 

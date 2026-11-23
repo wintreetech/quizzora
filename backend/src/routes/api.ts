@@ -30,7 +30,10 @@ import {
 } from "../services/competitions.js";
 import { config } from "../config.js";
 import { randomBytes } from "node:crypto";
-import { getPricing } from "../services/pricing.js";
+import { getQuizPricing } from "../services/pricing.js";
+import { discoverQuizzes } from "../services/catalogue.js";
+import { quizCategories } from "../services/categories.js";
+import { publicStandings } from "../services/standings.js";
 export const api = Router();
 export const quizSummary = (q: any) => ({
   id: id(q),
@@ -48,12 +51,14 @@ export const quizSummary = (q: any) => ({
   visibility: q.visibility,
   ownerId: q.ownerId,
   createdAt: q.createdAt,
-  pricing: getPricing(q),
+  pricing: getQuizPricing(q),
+  progress: q.progress || null,
+  players: q.players || 0,
 });
 api.get("/config", async (_req, res) => {
   const settings = await Settings.findOne({ key: "public" });
   res.json({
-    categories,
+    categories: await quizCategories(),
     supportEmail:
       settings?.value?.supportEmail || process.env.SUPPORT_EMAIL || null,
     announcement: settings?.value?.announcement || "",
@@ -62,57 +67,11 @@ api.get("/config", async (_req, res) => {
   });
 });
 api.get("/quizzes", async (req, res) => {
-  const query = z
-    .object({
-      q: z.string().max(100).default(""),
-      category: z.string().max(50).optional(),
-      ids: z.string().max(5000).optional(),
-      difficulty: z.enum(["Easy", "Medium", "Hard"]).optional(),
-      access: z.enum(["all", "free", "premium"]).default("all"),
-      sort: z.enum(["featured", "newest", "quickest"]).default("featured"),
-      page: z.coerce.number().int().min(1).max(1000).default(1),
-      limit: z.coerce.number().int().min(1).max(24).default(8),
-    })
-    .parse(req.query);
-  const filter: any = { status: "published", visibility: "public" };
-  if (query.ids !== undefined) {
-    const ids = z.array(z.string().regex(/^[a-fA-F0-9]{24}$/)).max(200).parse(query.ids ? query.ids.split(",") : []);
-    filter._id = { $in: ids };
-  }
-  if (query.q)
-    filter.title = {
-      $regex: query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      $options: "i",
-    };
-  if (query.category) filter.category = query.category;
-  if (query.difficulty) filter.difficulty = query.difficulty;
-  if (query.access === "premium") filter["pricing.coinPrice"] = { $gt: 0 };
-  if (query.access === "free")
-    filter.$or = [{ "pricing.coinPrice": 0 }, { pricing: { $exists: false } }];
-  const total = await Quiz.countDocuments(filter);
-  const offset = (query.page - 1) * query.limit;
-  const rows =
-    query.sort === "quickest"
-      ? await Quiz.aggregate([
-          { $match: filter },
-          { $addFields: { totalSeconds: { $sum: "$questions.seconds" } } },
-          { $sort: { totalSeconds: 1, _id: 1 } },
-          { $skip: offset },
-          { $limit: query.limit },
-        ])
-      : await Quiz.find(filter)
-          .sort(
-            query.sort === "newest" ? { createdAt: -1, _id: 1 } : { _id: 1 },
-          )
-          .skip(offset)
-          .limit(query.limit)
-          .lean();
-  res.json({
-    items: rows.map(quizSummary),
-    total,
-    page: query.page,
-    pages: Math.ceil(total / query.limit),
-  });
+  const { rows, ...result } = await discoverQuizzes(
+    req.query,
+    req.user ? String(req.user._id) : undefined,
+  );
+  res.json({ ...result, items: rows.map(quizSummary) });
 });
 api.get("/quizzes/:id", async (req, res) => {
   const q = await Quiz.findById(req.params.id);
@@ -141,21 +100,19 @@ api.get("/quizzes/:id/preview", async (req, res) => {
     visibility: "public",
   });
   if (!q) throw new HttpError(404, "Quiz not found.");
-  const p = getPricing(q);
+  const p = getQuizPricing(q);
   if (p.accessType !== "FREE_PREVIEW_THEN_PAID" || !p.previewQuestions)
     throw new HttpError(404, "A preview is not available for this quiz.");
   res.json({
     title: q.title,
     scored: false,
-    questions: q.questions
-      .slice(0, p.previewQuestions)
-      .map((v: any) => ({
-        id: v.id,
-        prompt: v.prompt,
-        options: v.options,
-        type: v.type,
-        image: v.image,
-      })),
+    questions: q.questions.slice(0, p.previewQuestions).map((v: any) => ({
+      id: v.id,
+      prompt: v.prompt,
+      options: v.options,
+      type: v.type,
+      image: v.image,
+    })),
     pricing: p,
   });
 });
@@ -210,28 +167,42 @@ api.post("/attempts/:id/finish", requireAuth, async (req, res) =>
 );
 api.get("/dashboard", requireAuth, async (req, res) => {
   const userId = String(req.user._id);
+  const running = await Attempt.find({ userId, status: "active" })
+    .select("_id")
+    .limit(20);
+  for (const attempt of running)
+    await ownedAttempt(userId, String(attempt._id));
   const attempts = await Attempt.find({ userId, status: "completed" })
     .sort({ completedAt: -1 })
     .lean();
   const competitions = await Participant.find({ userId }).lean();
   const active = await Attempt.find({ userId, status: "active" })
-    .sort({ updatedAt: -1 }).limit(6).select("_id title quizId index snapshot deadline").lean();
+    .sort({ updatedAt: -1 })
+    .limit(6)
+    .select("_id title quizId index snapshot deadline")
+    .lean();
   const score = attempts.reduce((n, a) => n + a.score, 0);
-  const all = await Attempt.aggregate([
-    { $match: { status: "completed" } },
-    { $group: { _id: "$userId", score: { $sum: "$score" } } },
-    { $sort: { score: -1, _id: 1 } },
-  ]);
-  const rank = all.findIndex((a) => a._id === userId) + 1;
+  const all = await publicStandings();
+  const rank = all.findIndex((a) => a.userId === userId) + 1;
   res.json({
     total: attempts.length,
-    active: active.map((a) => ({ id: id(a), quizId: a.quizId, title: a.title, answered: a.index, total: a.snapshot.length, deadline: a.deadline })),
+    active: active.map((a) => ({
+      id: id(a),
+      quizId: a.quizId,
+      title: a.title,
+      answered: a.index,
+      total: a.snapshot.length,
+      deadline: a.deadline,
+    })),
     accuracy: attempts.length
       ? Math.round(
           attempts.reduce((n, a) => n + a.accuracy, 0) / attempts.length,
         )
       : 0,
     best: attempts.length ? Math.max(...attempts.map((a) => a.score)) : 0,
+    bestAccuracy: attempts.length
+      ? Math.max(...attempts.map((a) => a.accuracy))
+      : 0,
     points: score,
     rank: rank || null,
     competitions: competitions.length,
@@ -244,7 +215,7 @@ api.get("/dashboard", requireAuth, async (req, res) => {
       completedAt: a.completedAt,
       elapsedMs: a.elapsedMs,
     })),
-    categories: categories
+    categories: [...new Set(attempts.map((attempt) => attempt.category))]
       .map((c) => {
         const rows = attempts.filter((a) => a.category === c);
         return {
@@ -287,62 +258,42 @@ api.get("/dashboard", requireAuth, async (req, res) => {
     ],
   });
 });
+api.get("/activity", requireAuth, async (req, res) => {
+  const page = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100000)
+    .catch(1)
+    .parse(req.query.page);
+  const filter = { userId: String(req.user._id), status: "completed" };
+  const [items, total] = await Promise.all([
+    Attempt.find(filter)
+      .sort({ completedAt: -1, _id: -1 })
+      .skip((page - 1) * 12)
+      .limit(12)
+      .select("title quizId category score accuracy completedAt elapsedMs")
+      .lean(),
+    Attempt.countDocuments(filter),
+  ]);
+  res.json({
+    items: items.map((attempt) => ({ ...attempt, id: id(attempt) })),
+    total,
+    page,
+    pages: Math.ceil(total / 12),
+  });
+});
 api.get("/leaderboard", async (req, res) => {
   const period = z
     .enum(["week", "month", "all"])
     .catch("week")
     .parse(req.query.period);
-  const match: any = { status: "completed" };
-  if (period !== "all")
-    match.completedAt = {
-      $gte: new Date(Date.now() - (period === "week" ? 7 : 30) * 86400000),
-    };
-  const rows = await Attempt.aggregate([
-    { $match: match },
-    { $sort: { score: -1, correctCount: -1, elapsedMs: 1, _id: 1 } },
-    {
-      $group: {
-        _id: { userId: "$userId", quizId: "$quizId" },
-        score: { $first: "$score" },
-        correctCount: { $first: "$correctCount" },
-        accuracy: { $first: "$accuracy" },
-        elapsedMs: { $first: "$elapsedMs" },
-      },
-    },
-    {
-      $group: {
-        _id: "$_id.userId",
-        score: { $sum: "$score" },
-        correctCount: { $sum: "$correctCount" },
-        accuracy: { $avg: "$accuracy" },
-        elapsedMs: { $sum: "$elapsedMs" },
-        quizzes: { $sum: 1 },
-      },
-    },
-    { $sort: { score: -1, correctCount: -1, elapsedMs: 1, _id: 1 } },
-    { $limit: 100 },
-  ]);
-  const users = await User.find({
-    _id: { $in: rows.map((x) => x._id) },
-    visibility: "public",
-    suspended: false,
-  }).lean();
-  const visible = rows.flatMap((r) => {
-    const u = users.find((x) => id(x) === r._id);
-    return u
-      ? [
-          {
-            userId: r._id,
-            displayName: u.displayName,
-            username: u.username,
-            score: r.score,
-            accuracy: Math.round(r.accuracy),
-            quizzes: r.quizzes,
-          },
-        ]
-      : [];
+  const rows = await publicStandings(period);
+  res.json({
+    items: rows
+      .slice(0, 100)
+      .map((row, index) => ({ ...row, rank: index + 1 })),
   });
-  res.json({ items: visible.map((r, i) => ({ ...r, rank: i + 1 })) });
 });
 api.get("/competitions", async (_req, res) => {
   const rooms = await Competition.find({

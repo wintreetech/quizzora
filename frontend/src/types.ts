@@ -17,6 +17,14 @@ export interface User {
   deletionRequestedAt?: string;
 }
 export interface Quiz {
+  players?: number;
+  progress?: {
+    attemptId: string;
+    status: string;
+    answered: number;
+    total: number;
+    accuracy: number;
+  } | null;
   pricing: Pricing;
   id: string;
   title: string;
@@ -92,6 +100,8 @@ export interface Room {
   }[];
 }
 export interface Pricing {
+  configured?: boolean;
+  issue?: string;
   accessType: string;
   coinPrice: number;
   includedAttempts: number;

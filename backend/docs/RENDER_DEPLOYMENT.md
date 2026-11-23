@@ -28,7 +28,7 @@ For a Blueprint, choose **`backend/render.yaml`** as the Blueprint file path dur
 5. Visit `https://YOUR-BACKEND-HOST/api/health`. Success is `{"status":"ok"}`. The backend root `/` is an API, so it does not render the Quizora website.
 6. Set frontend `VITE_API_URL` to that backend origin and **rebuild/redeploy the frontend**. This is a Vite build-time variable. For example `https://YOUR-BACKEND-HOST`, with no `/api` suffix.
 7. Add the Static Site rewrite rule: Source `/*`, Destination `/index.html`, Action `Rewrite`. It is already included if using the Blueprint. Refresh `/dashboard`, `/store` and `/how-it-works` directly to confirm client routing.
-8. Create the first administrator and review store pricing as described below. Verify signup → tour → free quiz → results → Overview, then organizer/live and Admin functions against the actual public URLs.
+8. Create the first administrator and review store pricing as described below. Verify signup → tour → free quiz → results → Dashboard, then organizer/live and Admin functions against the actual public URLs.
 
 ## Backend environment
 
@@ -112,7 +112,7 @@ Sign in on the deployed frontend. A fresh database supports USD store quotes imm
 
 EUR quotes require a recent verified ECB reference. The backend fetches it automatically and caches it in Atlas; the source date appears in the storefront. If the reference is unavailable or too old, EUR quoting fails closed and USD remains usable. No 1:1 conversion is invented. `npm run fx:refresh` can refresh the reference using the selected backend database environment. The host must be able to reach `https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml`.
 
-At the initial rate, $10 gives 200 coins and $500 gives 10,000 coins. EUR coin totals depend on the dated reference and round down to whole coins. Earlier fixed-package and discounted quantity prices are retained for existing orders only and cannot create new purchases. The old package activation process is not needed for this new store. All 30 additional library quizzes remain free unless explicitly repriced.
+At the initial rate, $10 gives 200 coins and $500 gives 10,000 coins. EUR coin totals depend on the dated reference and round down to whole coins. Earlier fixed-package and discounted quantity prices are retained for existing orders only and cannot create new purchases. The old package activation process is not needed for this new store. New platform seeds have explicit entry pricing: 12 free and 26 paid across all 38 quizzes. Existing Admin prices are preserved, and unknown incomplete prices are flagged for review.
 
 ## Real payments
 

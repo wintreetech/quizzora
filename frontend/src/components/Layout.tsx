@@ -16,10 +16,9 @@ const links: {
   icon: keyof typeof icons;
   tag?: string;
 }[] = [
-  { to: "/dashboard", label: "Overview", icon: "LayoutDashboard" },
+  { to: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
   { to: "/", label: "Explore quizzes", icon: "Compass" },
-  { to: "/live", label: "Live competitions", icon: "Radio", tag: "LIVE" },
-  { to: "/tournaments", label: "Tournaments", icon: "Flag" },
+  { to: "/activity", label: "My activity", icon: "Clock" },
   { to: "/leaderboard", label: "Leaderboard", icon: "Trophy" },
 ];
 export default function Layout() {
@@ -98,16 +97,18 @@ export default function Layout() {
               : location.pathname.startsWith("/live")
                 ? "Live competitions"
                 : location.pathname === "/dashboard"
-                  ? "Your overview"
-                  : location.pathname === "/library"
-                    ? "Your collection"
-                    : location.pathname === "/leaderboard"
-                      ? "Leaderboard"
-                      : location.pathname === "/settings"
-                        ? "Account settings"
-                        : location.pathname === "/tournaments"
-                          ? "Tournaments"
-                          : "Discover";
+                  ? "Dashboard"
+                  : location.pathname === "/activity"
+                    ? "My activity"
+                    : location.pathname === "/library"
+                      ? "Your collection"
+                      : location.pathname === "/leaderboard"
+                        ? "Leaderboard"
+                        : location.pathname === "/settings"
+                          ? "Account settings"
+                          : location.pathname === "/tournaments"
+                            ? "Tournaments"
+                            : "Explore quizzes";
   useTitle(title);
   useEffect(() => {
     setMobile(false);
@@ -208,9 +209,9 @@ export default function Layout() {
             <span>YOUR SPACE</span>
           </div>
           <nav>
-            <NavLink to="/wallet" className="nav-item" title="Wallet & history">
+            <NavLink to="/wallet" className="nav-item" title="My wallet">
               <Icon name="Wallet" />
-              <span>Wallet & history</span>
+              <span>My wallet</span>
             </NavLink>
             <NavLink to="/store" className="nav-item" title="Coin store">
               <Icon name="Coins" />
@@ -235,6 +236,14 @@ export default function Layout() {
             >
               <Icon name="Users" />
               <span>Friend challenges</span>
+            </NavLink>
+            <NavLink to="/live" className="nav-item" title="Live competitions">
+              <Icon name="Radio" />
+              <span>Live competitions</span>
+            </NavLink>
+            <NavLink to="/tournaments" className="nav-item" title="Tournaments">
+              <Icon name="Flag" />
+              <span>Tournaments</span>
             </NavLink>
             {(role === "ORGANIZER" || role === "SUPER_ADMIN") && (
               <NavLink
@@ -464,4 +473,3 @@ export default function Layout() {
     </div>
   );
 }
-

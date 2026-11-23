@@ -136,7 +136,10 @@ export function Organizer() {
           <button
             key={t}
             className={tab === t ? "active" : ""}
-            onClick={() => { setTab(t); setParams({ section: t }); }}
+            onClick={() => {
+              setTab(t);
+              setParams({ section: t });
+            }}
           >
             {t}
           </button>
@@ -398,7 +401,7 @@ export function Organizer() {
     </>
   );
 }
-function QuizBuilder({
+export function QuizBuilder({
   quizId,
   close,
   done,
@@ -452,7 +455,18 @@ function BuilderForm({
   close: () => void;
   done: () => void;
 }) {
-  const [quiz, setQuiz] = useState<any>(() => structuredClone(initial)),
+  const { user } = useApp();
+  const isAdmin = user?.role === "SUPER_ADMIN";
+  const [quiz, setQuiz] = useState<any>(() => ({
+      ...structuredClone(initial),
+      pricing: initial.pricing || {
+        accessType: "FREE",
+        coinPrice: 0,
+        includedAttempts: 1,
+        previewQuestions: 0,
+        available: true,
+      },
+    })),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [preview, setPreview] = useState(false);
@@ -532,7 +546,7 @@ function BuilderForm({
             await api(
               quizId ? `/organizer/quizzes/${quizId}` : "/organizer/quizzes",
               quizId ? "PUT" : "POST",
-              quiz,
+              isAdmin ? quiz : { ...quiz, pricing: undefined },
             );
             done();
           } catch (e) {
@@ -623,6 +637,127 @@ function BuilderForm({
             </select>
           </label>
         </div>
+        {isAdmin && (
+          <fieldset className="quiz-author-pricing">
+            <legend>Quiz entry pricing</legend>
+            <div className="form-columns">
+              <label>
+                Access mode
+                <select
+                  value={
+                    quiz.pricing.accessType === "UNCONFIGURED"
+                      ? ""
+                      : quiz.pricing.accessType
+                  }
+                  required
+                  onChange={(e) =>
+                    setQuiz({
+                      ...quiz,
+                      pricing: {
+                        ...quiz.pricing,
+                        accessType: e.target.value,
+                        coinPrice:
+                          e.target.value === "FREE"
+                            ? 0
+                            : Math.max(1, quiz.pricing.coinPrice),
+                        previewQuestions:
+                          e.target.value === "FREE_PREVIEW_THEN_PAID" ? 1 : 0,
+                      },
+                    })
+                  }
+                >
+                  <option value="" disabled>
+                    Choose entry pricing
+                  </option>
+                  <option value="FREE">Free</option>
+                  <option value="PAID_PER_ATTEMPT">Paid per attempt</option>
+                  <option value="FREE_PREVIEW_THEN_PAID">
+                    Free preview, paid attempt
+                  </option>
+                </select>
+              </label>
+              <label>
+                Entry price in coins
+                <input
+                  type="number"
+                  required
+                  min={quiz.pricing.accessType === "FREE" ? 0 : 1}
+                  max={100000}
+                  step={1}
+                  disabled={quiz.pricing.accessType === "FREE"}
+                  value={quiz.pricing.coinPrice}
+                  onChange={(e) =>
+                    setQuiz({
+                      ...quiz,
+                      pricing: {
+                        ...quiz.pricing,
+                        coinPrice: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Included attempts
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={quiz.pricing.includedAttempts}
+                  onChange={(e) =>
+                    setQuiz({
+                      ...quiz,
+                      pricing: {
+                        ...quiz.pricing,
+                        includedAttempts: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+              </label>
+              {quiz.pricing.accessType === "FREE_PREVIEW_THEN_PAID" && (
+                <label>
+                  Preview questions
+                  <input
+                    type="number"
+                    min={1}
+                    max={2}
+                    required
+                    value={quiz.pricing.previewQuestions}
+                    onChange={(e) =>
+                      setQuiz({
+                        ...quiz,
+                        pricing: {
+                          ...quiz.pricing,
+                          previewQuestions: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </label>
+              )}
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={quiz.pricing.available}
+                onChange={(e) =>
+                  setQuiz({
+                    ...quiz,
+                    pricing: { ...quiz.pricing, available: e.target.checked },
+                  })
+                }
+              />
+              Allow new entries
+            </label>
+            <p className="muted">
+              Publishing saves a versioned entry price. Existing paid attempts
+              keep their original access.
+            </p>
+          </fieldset>
+        )}
         <div className="builder-divider">
           <h3>
             The good questions{" "}

@@ -15,6 +15,7 @@ import {
   participationKey,
   clearParticipationKey,
 } from "../lib";
+import { quizPricingReady } from "../components/QuizCard";
 import { EditorialCover } from "../components/BrandArtwork";
 import type { Quiz, Attempt, Question } from "../types";
 export function QuizDetail() {
@@ -52,6 +53,11 @@ export function QuizDetail() {
     try {
       if (!consent) {
         const quote = await api(`/quizzes/${id}/access`);
+        if (!quote.available)
+          throw new Error(
+            quote.pricing?.issue ||
+              "New entries are currently paused for this quiz.",
+          );
         if (quote.charge > 0) {
           setSpend(quote);
           return;
@@ -77,6 +83,7 @@ export function QuizDetail() {
   if (isPending) return <Spinner />;
   if (error || !q)
     return <ErrorNote message={error?.message || "Quiz unavailable."} />;
+  const configured = quizPricingReady(q.pricing);
   return (
     <div className="detail-page">
       <Link to="/" className="back-link">
@@ -93,7 +100,11 @@ export function QuizDetail() {
         <div className="quiz-detail-info">
           <span className="eyebrow">
             {q.category.toUpperCase()} <span>◈</span>{" "}
-            {q.pricing?.coinPrice ? "PREMIUM QUIZ" : "FREE INTRODUCTION"}
+            {!configured
+              ? "PRICING UNDER REVIEW"
+              : q.pricing.coinPrice
+                ? "PAID QUIZ"
+                : "FREE QUIZ"}
           </span>
           <h1>{q.title}</h1>
           <p className="detail-description">{q.description}</p>
@@ -115,15 +126,19 @@ export function QuizDetail() {
                   ? "Resume · no new charge"
                   : access?.remainingIncludedAttempts
                     ? `${access.remainingIncludedAttempts} included attempts left`
-                    : q.pricing?.coinPrice
-                      ? `${q.pricing.coinPrice} coins`
-                      : "Free entry"}
+                    : !configured
+                      ? "Entry pricing under review"
+                      : q.pricing?.coinPrice
+                        ? `${q.pricing.coinPrice} coins`
+                        : "Free entry"}
               </strong>
             </div>
             <span>
-              {q.pricing?.coinPrice
-                ? `${q.pricing.includedAttempts} official attempt${q.pricing.includedAttempts === 1 ? "" : "s"} included. New purchases require confirmation.`
-                : "A complete introduction. No coins needed."}
+              {!configured
+                ? "An administrator needs to publish this quiz entry price before new attempts can start."
+                : q.pricing?.coinPrice
+                  ? `${q.pricing.includedAttempts} official attempt${q.pricing.includedAttempts === 1 ? "" : "s"} included. New purchases require confirmation.`
+                  : "A complete introduction. No coins needed."}
             </span>
           </div>
           <div className="detail-stats">
@@ -163,7 +178,13 @@ export function QuizDetail() {
           <button
             className="btn primary full large"
             onClick={start}
-            disabled={busy || access?.available === false}
+            disabled={
+              busy ||
+              access?.available === false ||
+              (!configured &&
+                !access?.resumeAttemptId &&
+                !access?.remainingIncludedAttempts)
+            }
           >
             {busy ? (
               <Spinner small />
@@ -174,9 +195,11 @@ export function QuizDetail() {
                   ? "Resume your attempt"
                   : access?.remainingIncludedAttempts
                     ? "Use an included attempt"
-                    : q.pricing?.coinPrice
-                      ? `Start premium quiz · ${q.pricing.coinPrice} coins`
-                      : "Let’s see what you know"}{" "}
+                    : !configured
+                      ? "Entry pricing under review"
+                      : q.pricing?.coinPrice
+                        ? `Start paid quiz · ${q.pricing.coinPrice} coins`
+                        : "Let’s see what you know"}{" "}
                 <Icon name="ArrowRight" size={18} />
               </>
             )}
@@ -234,6 +257,7 @@ export function QuizDetail() {
       {spend && (
         <SpendConfirmation
           title={q.title}
+          questionCount={q.questionCount}
           coinPrice={spend.charge}
           version={spend.pricing.version}
           includedAttempts={spend.pricing.includedAttempts}
@@ -570,17 +594,26 @@ export function QuizPlayer() {
               setBusy(true);
               setEndError("");
               try {
-                const result = await api<Attempt>(`/attempts/${id}/finish`, "POST");
+                const result = await api<Attempt>(
+                  `/attempts/${id}/finish`,
+                  "POST",
+                );
                 client.setQueryData(["attempt", id], result);
                 navigate(`/results/${id}`);
               } catch (error) {
                 setEndError((error as Error).message);
-              } finally { setBusy(false); }
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             Finish & see my result <Icon name="ArrowRight" size={17} />
           </button>
-          <button className="btn outline full" disabled={busy} onClick={() => setEnd(false)}>
+          <button
+            className="btn outline full"
+            disabled={busy}
+            onClick={() => setEnd(false)}
+          >
             Keep going
           </button>
         </Modal>

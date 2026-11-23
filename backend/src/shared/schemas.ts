@@ -50,7 +50,10 @@ export const questionSchema = z
       if (!q.acceptedText?.length)
         bad("Text questions require accepted answers");
     } else {
-      if (new Set(q.options.map((option) => option.toLocaleLowerCase())).size !== q.options.length)
+      if (
+        new Set(q.options.map((option) => option.toLocaleLowerCase())).size !==
+        q.options.length
+      )
         bad("Answer options must be distinct");
       if (
         q.options.length < 2 ||
@@ -76,7 +79,7 @@ export const quizSchema = z
   .object({
     title: z.string().trim().min(3).max(120),
     description: z.string().trim().min(10).max(2000),
-    category: z.enum(categories),
+    category: z.string().trim().min(2).max(50),
     difficulty: z.enum(["Easy", "Medium", "Hard"]),
     visibility: z.enum(["public", "private"]).default("public"),
     status: z.enum(["draft", "published", "archived"]).default("draft"),

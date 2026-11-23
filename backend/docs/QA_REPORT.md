@@ -6,23 +6,23 @@ Executed 23 November 2026 on the existing Windows workspace. All implementation 
 
 | Command | Directory | Result |
 | --- | --- | --- |
-| `npm.cmd test` | backend | **89 passed**, five test files |
-| `npm.cmd run test:e2e` | frontend | **12 passed**, Chromium browser journeys |
-| `npm.cmd run test:e2e -- --grep 'discovery search\|premium design\|USD/EUR amount'` | frontend | Three targeted journeys passed after the mobile navigation-transition polish |
+| `npm.cmd test` | backend | **95 passed**, six test files |
+| `npm.cmd run test:e2e` | frontend | **14 passed**, Chromium browser journeys |
+| `npm.cmd run test:e2e -- --grep "Admin creates\|adult registration"` | frontend | Two targeted journeys passed after correcting an exact-label browser selector and refreshing dashboard screenshots |
 | `npm.cmd run build` | backend | Passed, TypeScript compilation |
 | `npm.cmd run build` | frontend | Passed, TypeScript check and Vite production bundle |
 | `npm.cmd run lint` | frontend | Passed with the repository's configured JavaScript lint rules; TypeScript is checked by both builds |
 | `npm.cmd audit --omit=dev --json` | backend | Zero reported production vulnerabilities |
 | `npm.cmd audit --omit=dev --json` | frontend | Zero reported production vulnerabilities |
-| `npm.cmd run check:client` | backend | Passed; 32 frontend source/build text artifacts checked for configured backend credential values and removed payment-simulation labels |
+| `npm.cmd run check:client` | backend | Passed; 38 frontend source/build text artifacts checked for configured backend credential values and removed payment-simulation labels |
 | `node scripts/review.mjs` | frontend | 35 local route/viewport checks; no horizontal document overflow or uncaught page errors |
 | `npm.cmd run fx:refresh` with local replica configuration | backend | Actual ECB reference retrieved and cached: 20 November 2026, EUR 1 = USD 1.0990 |
 
-Dependency audits required permitted registry network access; no dependencies were added or upgraded during this audit. Package scripts were extended without changing the dependency tree. The browser framework launches isolated test servers at 5174/4100 and a disposable MongoDB replica; its provider transport and exchange reference are fixtures. These tests never charge a real card or credit the normal application's wallets.
+Dependency audits required permitted registry network access; no dependencies were added or upgraded during this audit. Package scripts were extended without changing the dependency tree. The browser framework launches isolated test servers at 5175/4100 (frontend port can be overridden with `E2E_FRONTEND_PORT`) and a disposable MongoDB replica; its provider transport and exchange reference are fixtures. These tests never charge a real card or credit the normal application's wallets.
 
-The production frontend main JavaScript chunk is approximately 488 kB before compression. Information pages, Admin and Organizer load separately. The previous over-500-kB main-chunk warning was resolved with route splitting. Production builds succeeded without the chunk-size warning.
+The production frontend main JavaScript chunk is approximately 384 kB before compression. Information pages, Admin and Organizer load separately. The previous over-500-kB main-chunk warning was resolved with route splitting. Production builds succeeded without the chunk-size warning.
 
-## Twelve browser journeys executed
+## Browser journeys executed
 
 1. Discovery search, server categories, filters, saved collection, mobile drawer and theme controls.
 2. Adult signup, five-question scored attempt, correct explanations, history, achievements and settings.
@@ -36,6 +36,47 @@ The production frontend main JavaScript chunk is approximately 488 kB before com
 10. Public instructions, new Mathematics & Logic category, saved quiz outside page one, dashboard resume and early finish. A forced 503 on finish is shown inside the modal and successfully retried.
 11. Public recovery/legal/not-found routes; player workspace restrictions; all Admin sections; sign-out/sign-in; URL-driven section selection and browser Back; mobile Admin controls.
 12. USD/EUR switching, 10–500 bounds, keyboard range changes, numeric clamping, current reference text, a forced EUR conversion outage, disabled checkout on quote failure, and successful quote retry.
+13. All access resets the Free selection; all eligible IDs match the complete backend result across pages with no duplicates; paid/subject/level/search/reset combinations.
+14. Admin creates a new category and paid quiz, publishes it, edits its fee from 65 to 85 coins, verifies discovery/detail prices, unpublishes it and confirms exclusion, then republishes and confirms discovery.
+
+## Final dashboard and quiz-pricing audit
+
+The final brief was implemented in the existing application. The owner clarified option 1: retain **10-500 USD/EUR purchase amounts and no customer payment demo**, overriding the older slider/demo wording in the attachment.
+
+### Root causes and repairs
+
+1. Library seeds omitted pricing. The legacy migration ran only once, and the generic pricing helper supplied FREE/zero defaults for missing quiz configuration. Cards also inferred Free from a falsy price. New seeds now have explicit versioned Free/Paid access. `getQuizPricing` marks incomplete prices UNCONFIGURED/unavailable; quiz entry refuses them. Cards and details show pricing review rather than Free.
+2. Discovery used separate URL and React filter state. Selecting the old All category could leave Free active, and the first eight results looked like the complete list. The shared URL-driven catalogue uses one backend contract for access, subject, level, search, ordering and pagination. The All access tab clears access and special sort; explicit subject/search/level filters remain visible and can be reset. Counts come from the same aggregation as results. Every page is reachable with stable ID tie-breaks.
+3. Quiz creation stripped price input, and status-only publication did not validate complete content/pricing. The shared transactional authoring service now supports explicit Admin pricing with version history/audit, validates registered categories and question data, and preserves a price during content-only edits. Admin publication rejects incomplete content/pricing.
+4. Dashboard rank previously summed replays while public rankings used the best result for each quiz. Both now use the same standings calculation. Progress, achievements, transactions and popularity derive from actual records; no fabricated streaks or coin rewards were added.
+
+### Migration guarantees
+
+Startup runs `migrateQuizAccess` after seeding/economy setup. It repairs only known platform seeds with missing or inferred legacy pricing and no published pricing history. Existing explicit Admin prices, customer quizzes, prior attempts, ledger entries and purchases are preserved. Unrecognized incomplete prices remain flagged for Admin review. Every repaired price is audited/versioned; reruns do not duplicate those records. The 30 added seed quizzes have Easy free, Medium 25 and Hard 75 coin entries; the original eight keep their intended free/paid starter mix unless explicitly repriced.
+
+### Actual normal local database counts
+
+Checked through both pages of the normal API, separately from disposable tests:
+
+| Metric | Actual count |
+| --- | ---: |
+| Published public quizzes | 38 |
+| Explicit free quizzes | 12 |
+| Explicit paid quizzes | 26 |
+| Unique quiz IDs visible through All | 38 |
+| Pricing needing review | 0 |
+| Public categories represented | 11 |
+| Draft / archived / private quizzes in this local database | 0 / 0 / 0 |
+| Question count | 160 |
+| Audited untouched-seed pricing repairs | 30 |
+
+The original eight plus 30 new quizzes contain 160 questions. Draft, archived and private quizzes remain outside public discovery; paid quizzes are included without requiring a purchase to browse. Invalid published pricing, if encountered in another database, stays visible with a review badge and cannot start new entries. Counts in disposable test databases additionally include quizzes deliberately authored by the tests.
+
+### New verification
+
+Six new integration cases verify the 12/26 seed mix; all eligible IDs across five pages under all four sorts; combined filters and privacy; invalid-price refusal and repair; category creation and Admin publication; preservation/idempotency of migration; concurrent paid starts with one debit; free entry without debit; real dashboard/activity totals; and payment-availability reporting. The existing 89 backend cases still pass, including zero duplicate credits/rewards and refund/hold behavior. Playing awards score points and earned badges, **not spendable coins**, so replaying cannot farm wallet credits.
+
+Two browser journeys were added for complete paginated ID comparison and Admin category/create/publish/edit-price/unpublish discovery. The expanded first run found an exact-label locator that did not match the nested category select; the browser test now uses the control's accessible combobox role/name. The final full run passed all 14 journeys. The normal preview server had cached an empty transformed module during rapid file updates; refreshing the Vite configuration cleared the cache. The subsequent normal-server 35-route/viewport sweep passed. Existing browser coverage was updated for Dashboard/My Activity and the explicit paid entry wording. Desktop/mobile dashboard screenshots include actual test account data. Additional response/layout coverage remains described below.
 
 ## Backend coverage and data checks
 
@@ -66,7 +107,7 @@ The normal local API was checked independently: healthy, 38 published platform q
 | Early-finish network failure could become an unhandled rejection | Modal error state, disabled duplicate submit and retry |
 | Shared modal Escape could capture an old close callback | Latest callback reference and visible/enabled focus trap |
 | Dense Admin tab strip and section/back-state mismatch | Frequent actions plus grouped selector; Admin state derives from the validated URL |
-| Old visual identity still resembled the earlier game presentation | New evergreen/ink palette, real featured-quiz hero, amount/currency control panel, receipt summary and responsive layouts |
+| Old visual identity still resembled the earlier game presentation | Complete player workspace with midnight navigation, blue actions, progress hero, category icon cards, inline catalogue, real wallet/activity panels, and responsive layouts |
 | Local screenshot script waited for a removed heading | Updated route/viewport script with failure collection and current headings |
 | ESLint reported missing Node globals in Vite config | Correct Node/browser globals in its configured file scope |
 | Cold deployment could omit build tools under production install | Render build uses `npm ci --include=dev` |
@@ -93,7 +134,7 @@ The original brief requested a customer payment demo. The owner subsequently ins
 
 **Ready for client design/UX review:** yes. **Ready for functional acceptance testing:** yes, with the external gates above identified. **Ready for production purchases:** no.
 
-Screenshots are in `frontend/artifacts/review/`, including desktop/mobile discovery/store/How It Works, signup tour, results, player Overview, EUR store and Admin payments/analytics. Screenshot accounts and financial examples are isolated test fixtures, not real sales.
+Screenshots are in `frontend/artifacts/review/`, including `dashboard-final-desktop.png`, `dashboard-final-mobile.png`, `admin-quiz-management.png`, desktop/mobile discovery/store/How It Works, signup tour, results, EUR store and Admin payments/analytics. Screenshot accounts and financial examples are isolated test fixtures, not real sales.
 
 Use [CLIENT_DEMO_GUIDE.md](CLIENT_DEMO_GUIDE.md) for the client walkthrough, [CLIENT_APPROVAL_CHECKLIST.md](CLIENT_APPROVAL_CHECKLIST.md) for sign-off, [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for exact hosting variables and [DEPLOYMENT_READINESS.md](DEPLOYMENT_READINESS.md) for production gates.
 

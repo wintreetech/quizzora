@@ -8,18 +8,30 @@ import Discover from "./pages/Discover";
 import { QuizDetail, QuizPlayer, Results } from "./pages/Quiz";
 import { Live, LiveRoom } from "./pages/Live";
 import {
-  Dashboard,
+  Achievements,
   Leaderboard,
   Settings,
   Challenges,
   ChallengePage,
 } from "./pages/Player";
-const Pricing = React.lazy(() => import("./pages/Info").then((m) => ({ default: m.Pricing })));
-const Help = React.lazy(() => import("./pages/Info").then((m) => ({ default: m.Help })));
-const Legal = React.lazy(() => import("./pages/Info").then((m) => ({ default: m.Legal })));
-const ResetPassword = React.lazy(() => import("./pages/Info").then((m) => ({ default: m.ResetPassword })));
-const VerifyEmail = React.lazy(() => import("./pages/Info").then((m) => ({ default: m.VerifyEmail })));
-const NotFound = React.lazy(() => import("./pages/Info").then((m) => ({ default: m.NotFound })));
+const Pricing = React.lazy(() =>
+  import("./pages/Info").then((m) => ({ default: m.Pricing })),
+);
+const Help = React.lazy(() =>
+  import("./pages/Info").then((m) => ({ default: m.Help })),
+);
+const Legal = React.lazy(() =>
+  import("./pages/Info").then((m) => ({ default: m.Legal })),
+);
+const ResetPassword = React.lazy(() =>
+  import("./pages/Info").then((m) => ({ default: m.ResetPassword })),
+);
+const VerifyEmail = React.lazy(() =>
+  import("./pages/Info").then((m) => ({ default: m.VerifyEmail })),
+);
+const NotFound = React.lazy(() =>
+  import("./pages/Info").then((m) => ({ default: m.NotFound })),
+);
 const Organizer = React.lazy(() =>
   import("./pages/Organizer").then((m) => ({ default: m.Organizer })),
 );
@@ -34,7 +46,9 @@ import "./identity.css";
 import "./coin-builder.css";
 import "./client-polish.css";
 import "./premium.css";
+import "./player-workspace.css";
 import HowQuizoraWorks from "./pages/HowItWorks";
+import { PlayerHome, PlayerActivity } from "./pages/PlayerHome";
 document.documentElement.dataset.theme =
   localStorage.getItem("quizora-theme") || "light";
 const client = new QueryClient({
@@ -59,12 +73,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="quiz/:id" element={<QuizDetail />} />
                 <Route path="play/:id" element={<QuizPlayer />} />
                 <Route path="results/:id" element={<Results />} />
-                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="dashboard" element={<PlayerHome />} />
+                <Route path="activity" element={<PlayerActivity />} />
                 <Route path="library" element={<Discover library />} />
-                <Route
-                  path="achievements"
-                  element={<Dashboard achievements />}
-                />
+                <Route path="achievements" element={<Achievements />} />
                 <Route path="leaderboard" element={<Leaderboard />} />
                 <Route path="live" element={<Live />} />
                 <Route path="live/:id" element={<LiveRoom />} />

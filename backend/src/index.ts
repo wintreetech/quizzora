@@ -13,11 +13,13 @@ import { migrateEconomy } from "./economy-migration.js";
 import { reconcilePendingPayments } from "./services/transactworld.js";
 import mongoose from "mongoose";
 import { loadMerchantIdentity } from "./services/merchant-settings.js";
+import { migrateQuizAccess } from "./quiz-access-migration.js";
 await connectDatabase();
 await loadMerchantIdentity();
 await seed();
 for (const model of Object.values(mongoose.models)) await model.init();
 await migrateEconomy();
+await migrateQuizAccess();
 const server = createServer(createApp());
 const io = setupRealtime(server);
 let ticking = false;
@@ -47,7 +49,9 @@ const paymentTimer = setInterval(async () => {
   }
 }, 60000);
 server.listen(config.port, "0.0.0.0", () =>
-  console.info(`Quizora API ${config.production ? config.apiUrl : `http://localhost:${config.port}`}`),
+  console.info(
+    `Quizora API ${config.production ? config.apiUrl : `http://localhost:${config.port}`}`,
+  ),
 );
 let stopping = false;
 async function shutdown() {

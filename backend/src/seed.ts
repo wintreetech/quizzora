@@ -2,6 +2,7 @@ import { Quiz, Plan, Competition } from "./models.js";
 import { seedQuizzes } from "./seed-data.js";
 import { libraryQuizzes } from "./library-data.js";
 import { quizSchema } from "./shared/schemas.js";
+import { defaultQuizPricing } from "./services/pricing.js";
 export async function seed() {
   for (const source of [...seedQuizzes, ...libraryQuizzes]) {
     const data = quizSchema.parse({
@@ -18,6 +19,7 @@ export async function seed() {
           ownerId: "platform",
           version: 1,
           slug: source.seedKey,
+          pricing: defaultQuizPricing(source),
         },
       },
       { upsert: true },

@@ -37,9 +37,13 @@ test("discovery search, filters, bookmarks, mobile drawer, and themes", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(page.locator(".quiz-card")).toHaveCount(8);
-  await page.getByRole("button", { name: "Technology", exact: true }).click();
+  await page
+    .getByLabel("Quiz category", { exact: true })
+    .selectOption("Technology");
   await expect(page.locator(".quiz-card")).toHaveCount(4);
-  await expect(page.locator(".quiz-card").filter({ hasText: "Think you speak tech?" })).toHaveCount(1);
+  await expect(
+    page.locator(".quiz-card").filter({ hasText: "Think you speak tech?" }),
+  ).toHaveCount(1);
   await page
     .getByRole("button", { name: "Save Think you speak tech?" })
     .click();
@@ -68,6 +72,7 @@ test("adult registration, quiz scoring, explanations, history, achievements, and
   page,
 }) => {
   await register(page, "solo");
+  await page.goto("/?q=The%20universe%20is%20calling");
   await page
     .locator(".quiz-card")
     .filter({ hasText: "The universe is calling" })
@@ -94,8 +99,29 @@ test("adult registration, quiz scoring, explanations, history, achievements, and
   await expect(page.locator(".review-content").first()).toContainText(
     "Ganymede",
   );
-  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await expect(page.locator(".stat-card").first()).toContainText("1");
+  await expect(page.locator(".activity-preview")).toContainText(
+    "The universe is calling",
+  );
+  await expect(page.locator(".player-progress-ring strong")).toHaveText("100%");
+  await page.screenshot({
+    path: "artifacts/review/dashboard-final-desktop.png",
+    fullPage: true,
+  });
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `Dashboard at ${width}px`,
+    ).toBe(width);
+    if (width === 390)
+      await page.screenshot({
+        path: "artifacts/review/dashboard-final-mobile.png",
+        fullPage: true,
+      });
+  }
+  await page.getByRole("link", { name: "My activity", exact: true }).click();
   await expect(page.locator("table")).toContainText("The universe is calling");
   await page.getByRole("link", { name: "Achievements", exact: true }).click();
   await expect(page.locator(".achievement-card.earned")).toHaveCount(2);
@@ -337,10 +363,17 @@ test("premium preview, explicit coin consent, refresh recovery, included replays
     "Unlock the complete quiz for 25 coins",
   );
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: /Start premium quiz/ }).click();
+  await page.getByRole("button", { name: /Start paid quiz/ }).click();
   await expect(
     page.getByRole("dialog", { name: "Confirm coin entry" }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Not this round", exact: true })
+    .click();
+  expect(
+    (await (await page.request.get(`${backend}/wallet`)).json()).balance,
+  ).toBe(50);
+  await page.getByRole("button", { name: /Start paid quiz/ }).click();
   await page.getByRole("button", { name: "Confirm & spend 25 coins" }).click();
   await expect(page).toHaveURL(/\/play\//);
   const attemptUrl = page.url();
@@ -364,7 +397,7 @@ test("premium preview, explicit coin consent, refresh recovery, included replays
   await page.getByRole("button", { name: "Finish early" }).click();
   await page.getByRole("button", { name: "Finish & see my result" }).click();
   await page.getByRole("button", { name: "Replay — 25 coins" }).click();
-  await page.getByRole("button", { name: /Start premium quiz/ }).click();
+  await page.getByRole("button", { name: /Start paid quiz/ }).click();
   await page.getByRole("button", { name: "Confirm & spend 25 coins" }).click();
   await expect(page).toHaveURL(/\/play\//);
   expect(
@@ -394,7 +427,7 @@ test("premium preview, explicit coin consent, refresh recovery, included replays
     },
   );
   await page.goto(`/quiz/${otherQuiz.id}`);
-  await page.getByRole("button", { name: /Start premium quiz/ }).click();
+  await page.getByRole("button", { name: /Start paid quiz/ }).click();
   await expect(page.getByRole("dialog")).toContainText(
     "You need 25 more coins",
   );
@@ -569,7 +602,7 @@ test("coin plan checkout, signed gateway return, independent verification and pa
     },
   );
   await page.goto(`/quiz/${quiz.id}`);
-  await page.getByRole("button", { name: /Start premium quiz/ }).click();
+  await page.getByRole("button", { name: /Start paid quiz/ }).click();
   await page.getByRole("button", { name: "Confirm & spend 25 coins" }).click();
   await expect(page).toHaveURL(/\/play\//);
   expect(
@@ -595,7 +628,9 @@ test("first signup opens a resumable guide and completed users can replay it fro
     guide.getByRole("heading", { name: "Follow what makes you curious." }),
   ).toBeVisible();
   await guide.getByRole("button", { name: "Next", exact: true }).click();
-  await guide.getByRole("slider", { name: "Try choosing a purchase amount" }).fill("75");
+  await guide
+    .getByRole("slider", { name: "Try choosing a purchase amount" })
+    .fill("75");
   await expect(guide.locator(".tour-slider-demo strong")).toContainText("75");
   await guide.getByRole("button", { name: "Next", exact: true }).click();
   await expect(
@@ -607,7 +642,7 @@ test("first signup opens a resumable guide and completed users can replay it fro
   await guide.getByRole("button", { name: "Start exploring" }).click();
   await expect(guide).not.toBeVisible();
   await page.reload();
-  await expect(page.locator(".page-heading h1")).toBeVisible();
+  await expect(page.locator("h1").first()).toBeVisible();
   await expect(guide).not.toBeVisible();
   const me = await (
     await page.request.get("http://localhost:4100/api/auth/me")
@@ -634,99 +669,209 @@ test("first signup opens a resumable guide and completed users can replay it fro
   ).toBe("completed");
 });
 
-test("unavailable purchases preserve real balances and show no demo controls", async ({ page }) => {
+test("unavailable purchases preserve real balances and show no demo controls", async ({
+  page,
+}) => {
   await register(page, "paused_buyer");
-  const before = await (await page.request.get("http://localhost:4100/api/wallet")).json();
-  const initial = await (await page.request.get("http://localhost:4100/api/payments")).json();
+  const before = await (
+    await page.request.get("http://localhost:4100/api/wallet")
+  ).json();
+  const initial = await (
+    await page.request.get("http://localhost:4100/api/payments")
+  ).json();
   const mutations: string[] = [];
   await page.route("**/api/coin-purchase/options", async (route) => {
     const response = await route.fetch();
-    await route.fulfill({ response, json: { ...await response.json(), checkoutAvailable: false } });
+    await route.fulfill({
+      response,
+      json: { ...(await response.json()), checkoutAvailable: false },
+    });
   });
   page.on("request", (request) => {
-    if (request.method() !== "GET" && /coin-purchase\/checkout|payments\/checkout|transactworld\.com/.test(request.url())) mutations.push(request.url());
+    if (
+      request.method() !== "GET" &&
+      /coin-purchase\/checkout|payments\/checkout|transactworld\.com/.test(
+        request.url(),
+      )
+    )
+      mutations.push(request.url());
   });
   await page.goto("/store");
-  await page.getByRole("slider", { name: "Choose purchase amount" }).fill("500");
+  await page
+    .getByRole("slider", { name: "Choose purchase amount" })
+    .fill("500");
   await expect(page.locator(".receipt-coins > strong")).toContainText("10,000");
-  await expect(page.getByText("Coin purchases are temporarily unavailable.", { exact: false })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Review purchase" })).toBeDisabled();
-  await expect(page.getByText(/demo payment|try demo|simulate payment/i)).toHaveCount(0);
+  await expect(
+    page.getByText("Coin purchases are temporarily unavailable.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Review purchase" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/demo payment|try demo|simulate payment/i),
+  ).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.screenshot({ path: "artifacts/review/coin-store-mobile.png", fullPage: true });
-  await page.getByRole("link", { name: "Explore free quizzes", exact: true }).click();
+  await page.screenshot({
+    path: "artifacts/review/coin-store-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("link", { name: "Explore free quizzes", exact: true })
+    .click();
   await expect(page.locator(".quiz-card").first()).toBeVisible();
   await expect(page.locator(".quiz-price.premium")).toHaveCount(0);
-  const after = await (await page.request.get("http://localhost:4100/api/wallet")).json();
+  const after = await (
+    await page.request.get("http://localhost:4100/api/wallet")
+  ).json();
   expect(after).toEqual(before);
-  expect(await (await page.request.get("http://localhost:4100/api/payments")).json()).toEqual(initial);
+  expect(
+    await (await page.request.get("http://localhost:4100/api/payments")).json(),
+  ).toEqual(initial);
   expect(mutations).toEqual([]);
 });
 
-test("public instructions, expanded categories, saved quizzes beyond page one and dashboard resume", async ({ page }) => {
+test("public instructions, expanded categories, saved quizzes beyond page one and dashboard resume", async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/how-it-works");
-  await expect(page.getByRole("heading", { name: "Choose a quiz", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Find a free quiz", exact: true }).click();
-  await page.getByRole("button", { name: "Mathematics & Logic", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose a quiz", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Find a free quiz", exact: true })
+    .click();
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await page
+    .getByLabel("Quiz category", { exact: true })
+    .selectOption("Mathematics & Logic");
   await expect(page.locator(".quiz-card")).toHaveCount(3);
   const target = "A little number sense: The challenge";
-  await page.getByRole("button", { name: `Save ${target}`, exact: true }).click();
+  await page
+    .getByRole("button", { name: `Save ${target}`, exact: true })
+    .click();
   await page.getByRole("link", { name: "Saved quizzes", exact: true }).click();
   await expect(page.locator(".quiz-card")).toHaveCount(1);
   await expect(page.locator(".quiz-card")).toContainText(target);
   await page.getByRole("link", { name: target, exact: true }).click();
   await expect(page.getByRole("heading", { name: target })).toBeVisible();
   await register(page, "resume_new");
-  const catalogue = await (await page.request.get("http://localhost:4100/api/quizzes?category=Mathematics%20%26%20Logic")).json();
-  const quiz = catalogue.items.find((q: any) => q.difficulty === "Hard");
+  const catalogue = await (
+    await page.request.get(
+      "http://localhost:4100/api/quizzes?category=Mathematics%20%26%20Logic",
+    )
+  ).json();
+  const quiz = catalogue.items.find((q: any) => q.difficulty === "Easy");
   await page.goto(`/quiz/${quiz.id}`);
   await page.getByRole("button", { name: "Let’s see what you know" }).click();
   await expect(page.locator(".answer-option").first()).toBeVisible();
   await page.goto("/dashboard");
-  await expect(page.getByRole("link", { name: `Continue ${target}`, exact: true })).toBeVisible();
-  await page.screenshot({ path: "artifacts/review/player-overview-desktop.png", fullPage: true });
-  await page.getByRole("link", { name: `Continue ${target}`, exact: true }).click();
+  await expect(
+    page.locator(".continue-grid").getByRole("link").first(),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "artifacts/review/player-overview-desktop.png",
+    fullPage: true,
+  });
+  await page.locator(".continue-grid").getByRole("link").first().click();
   await expect(page.locator(".answer-option").first()).toBeVisible();
   await page.getByRole("button", { name: "Finish early", exact: true }).click();
-  await page.route("**/api/attempts/*/finish", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "Connection interrupted. Please retry." }) }), { times: 1 });
+  await page.route(
+    "**/api/attempts/*/finish",
+    (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          message: "Connection interrupted. Please retry.",
+        }),
+      }),
+    { times: 1 },
+  );
   await page.getByRole("button", { name: "Finish & see my result" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Connection interrupted. Please retry.");
+  await expect(page.getByRole("dialog")).toContainText(
+    "Connection interrupted. Please retry.",
+  );
   await page.getByRole("button", { name: "Finish & see my result" }).click();
   await expect(page.locator(".result-stats")).toContainText("0");
-  await page.screenshot({ path: "artifacts/review/quiz-result-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: "artifacts/review/quiz-result-desktop.png",
+    fullPage: true,
+  });
   expect(errors).toEqual([]);
 });
 
-test("public recovery routes, player restrictions, every admin section and browser back navigation", async ({ page }) => {
+test("public recovery routes, player restrictions, every admin section and browser back navigation", async ({
+  page,
+}) => {
   test.setTimeout(90000);
-  const errors: string[] = [], serverErrors: string[] = [];
+  const errors: string[] = [],
+    serverErrors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("response", (response) => { if (response.status() >= 500 && response.url().includes("/api/")) serverErrors.push(`${response.status()} ${response.url()}`); });
-  for (const path of ["/hosting", "/legal/privacy", "/legal/terms", "/reset-password", "/verify-email", "/missing-page", "/admin", "/organizer", "/dashboard", "/wallet"]) {
+  page.on("response", (response) => {
+    if (response.status() >= 500 && response.url().includes("/api/"))
+      serverErrors.push(`${response.status()} ${response.url()}`);
+  });
+  for (const path of [
+    "/hosting",
+    "/legal/privacy",
+    "/legal/terms",
+    "/reset-password",
+    "/verify-email",
+    "/missing-page",
+    "/admin",
+    "/organizer",
+    "/dashboard",
+    "/wallet",
+  ]) {
     await page.goto(path);
     await expect(page.locator("h1").first()).toBeVisible();
     await expect(page.locator(".spinner")).toHaveCount(0);
   }
   await register(page, "restricted");
   await page.goto("/admin");
-  await expect(page.getByText("Your account does not have access to administration tools.")).toBeVisible();
-  expect((await page.request.get("http://localhost:4100/api/admin/overview")).status()).toBe(403);
+  await expect(
+    page.getByText(
+      "Your account does not have access to administration tools.",
+    ),
+  ).toBeVisible();
+  expect(
+    (
+      await page.request.get("http://localhost:4100/api/admin/overview")
+    ).status(),
+  ).toBe(403);
   await page.goto("/organizer");
-  await expect(page.getByRole("button", { name: "Enable creator tools" })).toBeVisible();
-  for (const path of ["/dashboard", "/library", "/wallet", "/achievements", "/challenges", "/settings"]) {
+  await expect(
+    page.getByRole("button", { name: "Enable creator tools" }),
+  ).toBeVisible();
+  for (const path of [
+    "/dashboard",
+    "/library",
+    "/wallet",
+    "/achievements",
+    "/challenges",
+    "/settings",
+  ]) {
     await page.goto(path);
     await expect(page.locator("h1").first()).toBeVisible();
     await expect(page.locator(".spinner")).toHaveCount(0);
     await expect(page.locator("main .error-note")).toHaveCount(0);
   }
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Get started", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Your curious side Sign in to make it yours" }).click();
+  await expect(
+    page.getByRole("button", { name: "Get started", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Your curious side Sign in to make it yours" })
+    .click();
   const login = page.getByRole("dialog");
   await login.getByLabel("Email address").fill("browser-admin@example.test");
-  await login.getByLabel("Password", { exact: true }).fill(process.env.E2E_ADMIN_PASSWORD!);
+  await login
+    .getByLabel("Password", { exact: true })
+    .fill(process.env.E2E_ADMIN_PASSWORD!);
   await login.getByRole("button", { name: "Let’s play", exact: true }).click();
   await expect(login).not.toBeVisible();
   await page.goto("/admin?section=Users");
@@ -735,7 +880,12 @@ test("public recovery routes, player restrictions, every admin section and brows
   await expect(page).toHaveURL(/section=Quizzes/);
   await page.goBack();
   await expect(page.getByLabel("Admin section")).toHaveValue("Users");
-  const sections = await page.getByLabel("Admin section").locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+  const sections = await page
+    .getByLabel("Admin section")
+    .locator("option")
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value),
+    );
   for (const section of sections) {
     await page.getByLabel("Admin section").selectOption(section);
     await expect(page.locator(".spinner")).toHaveCount(0);
@@ -744,41 +894,67 @@ test("public recovery routes, player restrictions, every admin section and brows
     await expect(page.locator("main")).not.toHaveText("");
   }
   await page.getByLabel("Admin section").selectOption("Payments");
-  await page.screenshot({ path: "artifacts/review/admin-payments-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: "artifacts/review/admin-payments-desktop.png",
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(page.getByLabel("Admin section")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
+    390,
+  );
   expect(errors).toEqual([]);
   expect(serverErrors).toEqual([]);
 });
 
-test("USD/EUR amount selection, bounds, keyboard controls and currency outage recovery", async ({ page }) => {
+test("USD/EUR amount selection, bounds, keyboard controls and currency outage recovery", async ({
+  page,
+}) => {
   await page.goto("/store");
   const slider = page.getByRole("slider", { name: "Choose purchase amount" });
   await expect(slider).toHaveAttribute("min", "10");
   await expect(slider).toHaveAttribute("max", "500");
   await slider.fill("10");
   await expect(page.locator(".receipt-coins > strong")).toContainText("200");
-  await slider.focus(); await page.keyboard.press("ArrowRight");
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
   await expect(slider).toHaveValue("11");
   await expect(page.locator(".receipt-coins > strong")).toContainText("220");
   await page.getByRole("button", { name: /EUR.*Euro/ }).click();
   await expect(page.locator(".receipt-total")).toContainText("€11.00");
   await expect(page.locator(".receipt-coins > strong")).toContainText("242");
-  await expect(page.locator(".currency-reference")).toContainText("ECB reference");
+  await expect(page.locator(".currency-reference")).toContainText(
+    "ECB reference",
+  );
   await slider.fill("500");
   await expect(page.locator(".receipt-coins > strong")).toContainText("11,000");
   await page.getByLabel("Purchase amount", { exact: true }).fill("999");
   await page.getByLabel("Purchase amount", { exact: true }).press("Enter");
-  await expect(page.getByLabel("Purchase amount", { exact: true })).toHaveValue("500");
+  await expect(page.getByLabel("Purchase amount", { exact: true })).toHaveValue(
+    "500",
+  );
   let offline = true;
   await page.route("**/api/coin-purchase/quote?**", async (route) => {
-    if (offline && new URL(route.request().url()).searchParams.get("currency") === "EUR") await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "EUR conversion is temporarily unavailable. Please retry." }) });
+    if (
+      offline &&
+      new URL(route.request().url()).searchParams.get("currency") === "EUR"
+    )
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          message: "EUR conversion is temporarily unavailable. Please retry.",
+        }),
+      });
     else await route.continue();
   });
   await slider.fill("25");
-  await expect(page.getByRole("alert")).toContainText("EUR conversion is temporarily unavailable");
-  await expect(page.getByRole("button", { name: "Review purchase" })).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText(
+    "EUR conversion is temporarily unavailable",
+  );
+  await expect(
+    page.getByRole("button", { name: "Review purchase" }),
+  ).toBeDisabled();
   offline = false;
   await page.getByRole("button", { name: "Retry quote", exact: true }).click();
   await expect(page.locator(".receipt-coins > strong")).toContainText("550");
@@ -786,6 +962,176 @@ test("USD/EUR amount selection, bounds, keyboard controls and currency outage re
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(page.locator(".sidebar")).not.toBeInViewport();
   await page.locator("h1").click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  await page.screenshot({ path: "artifacts/review/eur-store-mobile.png", fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
+    390,
+  );
+  await page.screenshot({
+    path: "artifacts/review/eur-store-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("All lists every eligible quiz ID across pages and resets access without losing explicit subject filters", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  const expected: string[] = [];
+  let total = 0;
+  for (let pageNumber = 1; pageNumber <= 3; pageNumber++) {
+    const response = await (
+      await page.request.get(
+        `http://localhost:4100/api/quizzes?limit=24&page=${pageNumber}`,
+      )
+    ).json();
+    total = response.total;
+    expected.push(...response.items.map((quiz: any) => quiz.id));
+    if (expected.length === total) break;
+  }
+  await page.goto("/?access=free");
+  await expect(page.locator(".quiz-price.premium")).toHaveCount(0);
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  const actual: string[] = [];
+  let pageNumber = 1;
+  while (actual.length < total) {
+    await expect(page.locator(".catalogue-pagination")).toContainText(
+      `Page ${pageNumber} of`,
+    );
+    await expect(page.locator(".quiz-card")).toHaveCount(
+      Math.min(8, total - actual.length),
+    );
+    actual.push(
+      ...(await page
+        .locator(".quiz-card")
+        .evaluateAll((cards) =>
+          cards.map((card) => card.getAttribute("data-quiz-id")!),
+        )),
+    );
+    if (actual.length < total) {
+      await page.getByRole("button", { name: "Next", exact: true }).click();
+      pageNumber++;
+    }
+  }
+  expect(actual.length).toBe(total);
+  expect(new Set(actual).size).toBe(total);
+  expect(actual.sort()).toEqual(expected.sort());
+  await page.getByRole("button", { name: "Paid", exact: true }).click();
+  await page
+    .getByLabel("Quiz category", { exact: true })
+    .selectOption("Mathematics & Logic");
+  await expect(page.locator(".quiz-card")).toHaveCount(2);
+  await expect(page.locator(".quiz-price.free")).toHaveCount(0);
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.locator(".quiz-card")).toHaveCount(3);
+  await page
+    .getByLabel("Quiz difficulty", { exact: true })
+    .selectOption("Hard");
+  await page.getByLabel("Search quiz catalogue").fill("number");
+  await page.getByRole("button", { name: "Apply quiz search" }).click();
+  await expect(page.locator(".quiz-card")).toHaveCount(1);
+  await expect(page.locator(".quiz-price.premium")).toContainText("75 coins");
+  await page
+    .getByRole("button", { name: "Reset filters", exact: true })
+    .click();
+  await expect(page.locator(".catalogue-count")).toHaveText(String(total));
+  await expect(page.getByLabel("Quiz category", { exact: true })).toHaveValue(
+    "",
+  );
+});
+
+test("Admin creates a category, publishes a paid quiz and changes its price through the new content workspace", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Your curious side Sign in to make it yours" })
+    .click();
+  const login = page.getByRole("dialog");
+  await login.getByLabel("Email address").fill("browser-admin@example.test");
+  await login
+    .getByLabel("Password", { exact: true })
+    .fill(process.env.E2E_ADMIN_PASSWORD!);
+  await login.getByRole("button", { name: "Let’s play" }).click();
+  await expect(login).not.toBeVisible();
+  await page.goto("/admin?section=Quizzes");
+  await expect(page.locator(".admin-content-counts")).toContainText("Paid");
+  await page.getByRole("button", { name: "Add category", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Category name").fill("Architecture");
+  await dialog.getByRole("button", { name: "Save category" }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: "Create quiz", exact: true }).click();
+  await dialog
+    .getByLabel("Give your quiz a name")
+    .fill("Architecture: a fresh perspective");
+  await dialog
+    .getByLabel("A little introduction")
+    .fill("Explore how buildings shape our everyday surroundings.");
+  await dialog
+    .getByRole("combobox", { name: "Category", exact: true })
+    .selectOption("Architecture");
+  await dialog.getByLabel("Access mode").selectOption("PAID_PER_ATTEMPT");
+  await dialog.getByLabel("Entry price in coins").fill("65");
+  await dialog
+    .getByLabel("Question", { exact: true })
+    .fill("Which structure is supported by columns?");
+  for (const [index, text] of [
+    "A portico",
+    "A painting",
+    "A carpet",
+    "A book",
+  ].entries())
+    await dialog
+      .getByLabel(`Option ${index + 1} for question 1`, { exact: true })
+      .fill(text);
+  await dialog
+    .getByLabel("The aha behind the answer")
+    .fill("A portico is a roofed entrance supported by columns.");
+  await dialog
+    .getByRole("combobox", { name: "Status", exact: true })
+    .selectOption("published");
+  await dialog.getByRole("button", { name: "Save & publish" }).click();
+  await expect(dialog).not.toBeVisible();
+  await page
+    .getByLabel("Search managed quizzes")
+    .fill("Architecture: a fresh perspective");
+  const row = page
+    .locator("tr")
+    .filter({ hasText: "Architecture: a fresh perspective" });
+  await expect(row).toContainText("65 coins");
+  await row.getByRole("button", { name: "Edit quiz & price" }).click();
+  await dialog.getByLabel("Entry price in coins").fill("85");
+  await dialog.getByRole("button", { name: "Save & publish" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toContainText("85 coins");
+  await page.locator("h1").click();
+  const dismiss = page.getByRole("button", { name: "Dismiss notification", exact: true });
+  if (await dismiss.isVisible()) await dismiss.click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: "artifacts/review/admin-quiz-management.png",
+    fullPage: true,
+  });
+  await page.goto("/?category=Architecture&tab=paid");
+  await expect(page.locator(".quiz-card")).toHaveCount(1);
+  await expect(page.locator(".quiz-card")).toContainText("85 coins");
+  await expect(page.getByLabel("Quiz category", { exact: true })).toHaveValue(
+    "Architecture",
+  );
+  await page
+    .locator(".quiz-card")
+    .getByRole("link", { name: "Play quiz", exact: true })
+    .click();
+  await expect(page.locator(".quiz-access-panel")).toContainText("85 coins");
+  for (const status of ["draft", "published"]) {
+    await page.goto("/admin?section=Quizzes");
+    await page.getByLabel("Search managed quizzes").fill("Architecture: a fresh perspective");
+    await row.getByRole("button", { name: "Review content", exact: true }).click();
+    await dialog.getByRole("combobox", { name: "Publication status", exact: true }).selectOption(status);
+    await dialog.getByLabel("Reason for this change").fill("Verified client publication workflow");
+    await dialog.getByRole("button", { name: "Save publication", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await page.goto("/?category=Architecture&tab=paid");
+    await expect(page.locator(".quiz-card")).toHaveCount(status === "draft" ? 0 : 1);
+  }
 });

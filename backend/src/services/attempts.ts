@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Attempt, Quiz, Entitlement, Audit } from "../models.js";
 import { atomic, ledger, refundEntry } from "./wallet.js";
-import { getPricing, checkConsent } from "./pricing.js";
+import { getQuizPricing, checkConsent } from "./pricing.js";
 import { config } from "../config.js";
 import { HttpError, locked, isCorrect, publicQuestion } from "../utils.js";
 import type { Question } from "../shared/schemas.js";
@@ -89,7 +89,7 @@ export async function startAttempt(
         (q.visibility !== "public" && q.ownerId !== userId)
       )
         throw new HttpError(404, "This quiz is not available.");
-      const pricing = getPricing(q);
+      const pricing = getQuizPricing(q);
       const entitlement = await Entitlement.findOne({
         userId,
         quizId,
@@ -176,7 +176,7 @@ export async function startAttempt(
   });
 }
 export async function quizAccess(userId: string | undefined, quiz: any) {
-  const pricing = getPricing(quiz);
+  const pricing = getQuizPricing(quiz);
   const attempt = userId
     ? await Attempt.findOne({
         userId,
@@ -310,7 +310,15 @@ export async function finishAttempt(userId: string, attemptId: string) {
   });
 }
 export async function acknowledgeAttempt(userId: string, attemptId: string) {
-  await Attempt.updateOne({ _id: attemptId, userId, status: "active", launchAcknowledgedAt: { $exists: false } }, { $set: { launchAcknowledgedAt: new Date() } });
+  await Attempt.updateOne(
+    {
+      _id: attemptId,
+      userId,
+      status: "active",
+      launchAcknowledgedAt: { $exists: false },
+    },
+    { $set: { launchAcknowledgedAt: new Date() } },
+  );
 }
 export async function tickAttempts() {
   const rows = await Attempt.find({

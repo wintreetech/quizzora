@@ -209,13 +209,13 @@ afterAll(async () => {
   await mongo?.stop();
 });
 describe("Coin accounting and pricing", () => {
-  it("migrates once without activating suggested prices or inventing currency prices", async () => {
+  it("migrates once without enabling currency purchases or overwriting intentional seed prices", async () => {
     const before = await CoinPackage.countDocuments();
     await migrateEconomy();
     expect(await CoinPackage.countDocuments()).toBe(before);
     expect(await CoinPackage.countDocuments({ active: true })).toBe(0);
     expect(await Quiz.countDocuments({ "pricing.coinPrice": { $gt: 0 } })).toBe(
-      0,
+      26,
     );
     expect(
       await Quiz.countDocuments({ "pricingDraft.coinPrice": { $gt: 0 } }),
@@ -907,7 +907,7 @@ describe('Owner-approved commercial launch and review holds',()=>{
     await launchCommercialProducts(true);
     const packs=await CoinPackage.find({key:{$in:['starter','popular','pro','ultimate']}}).sort({displayOrder:1});
     expect(packs.map(p=>p.amountMinor)).toEqual([299,599,1299,2499]);expect(packs.every(p=>p.active&&p.currency==='USD')).toBe(true);
-    expect(await Quiz.countDocuments({ownerId:'platform',seedKey:{$exists:true},'pricing.coinPrice':{$gt:0}})).toBe(6);
+    expect(await Quiz.countDocuments({ownerId:'platform',seedKey:{$exists:true},'pricing.coinPrice':{$gt:0}})).toBe(26);
     const p=packs[0];p.amountMinor=349;await p.save();await launchCommercialProducts(true);expect((await CoinPackage.findById(p._id))!.amountMinor).toBe(349);
   });
   it('previews support credits and target balances correctly when payment reversal coins are held',async()=>{

@@ -21,7 +21,12 @@ import {
 } from "../models.js";
 import { HttpError, id, locked } from "../utils.js";
 import { ensureWallet, adjustWallet, atomic } from "../services/wallet.js";
-import { getPricing, savePricing, modelFor } from "../services/pricing.js";
+import {
+  getPricing,
+  getQuizPricing,
+  savePricing,
+  modelFor,
+} from "../services/pricing.js";
 import {
   gatewayConfig,
   gatewayIssues,
@@ -88,6 +93,7 @@ economy.get("/coin-packages", async (_req, res) => {
     checkoutAvailable: gatewayIssues().length === 0,
     environment: gatewayConfig().environment,
     coinsExpire: false,
+    purchasesAvailable: gatewayIssues().length === 0,
     examples: prices.map((p) => ({
       title: p.title,
       coinPrice: p.pricing.coinPrice,
@@ -103,9 +109,20 @@ economy.get("/coin-purchase/options", async (_req, res) => {
   res.json({
     ...pricing,
     checkoutAvailable: ready,
-    currencies: ["USD", "EUR"].map((code) => ({ code, quotingAvailable: code === "USD" || !!reference, checkoutAvailable: ready && gatewayConfig().currencies.includes(code) })),
-    currency: "USD", defaultAmountMinor: 2500,
-    exchangeReference: reference ? { eurUsd: reference.eurUsd, date: reference.date, source: reference.source } : null,
+    currencies: ["USD", "EUR"].map((code) => ({
+      code,
+      quotingAvailable: code === "USD" || !!reference,
+      checkoutAvailable: ready && gatewayConfig().currencies.includes(code),
+    })),
+    currency: "USD",
+    defaultAmountMinor: 2500,
+    exchangeReference: reference
+      ? {
+          eurUsd: reference.eurUsd,
+          date: reference.date,
+          source: reference.source,
+        }
+      : null,
   });
 });
 economy.get("/coin-purchase/quote", async (req, res) => {
@@ -126,8 +143,18 @@ economy.get("/coin-purchase/quote", async (req, res) => {
 });
 economy.post("/coin-purchase/checkout", requireAuth, async (req, res) => {
   const legacyKey = key.safeParse(req.body?.requestKey);
-  if (req.body?.purchaseKind !== "budget" && (!legacyKey.success || !(await PaymentOrder.exists({ userId: id(req.user), requestKey: legacyKey.data }))))
-    throw new HttpError(410, "Coin pricing has changed. Reopen the coin store to choose your purchase amount.");
+  if (
+    req.body?.purchaseKind !== "budget" &&
+    (!legacyKey.success ||
+      !(await PaymentOrder.exists({
+        userId: id(req.user),
+        requestKey: legacyKey.data,
+      })))
+  )
+    throw new HttpError(
+      410,
+      "Coin pricing has changed. Reopen the coin store to choose your purchase amount.",
+    );
   if (gatewayIssues().length)
     throw new HttpError(
       503,
@@ -144,11 +171,11 @@ economy.post("/coin-purchase/checkout", requireAuth, async (req, res) => {
   res
     .status(201)
     .json(
-      await (req.body.purchaseKind === "budget" ? createBudgetCoinOrder : createCustomCoinOrder)(
-        id(req.user),
-        req.body,
-        req.ip || req.socket.remoteAddress || "",
-      ),
+      await (
+        req.body.purchaseKind === "budget"
+          ? createBudgetCoinOrder
+          : createCustomCoinOrder
+      )(id(req.user), req.body, req.ip || req.socket.remoteAddress || ""),
     );
 });
 economy.get("/wallet", requireAuth, async (req, res) => {
@@ -161,6 +188,7 @@ economy.get("/wallet", requireAuth, async (req, res) => {
     },
   ]);
   res.json({
+    purchasesAvailable: gatewayIssues().length === 0,
     balance: w.balance,
     reversalHold: w.reversalHold,
     sequence: w.sequence,
@@ -208,8 +236,17 @@ economy.post("/payments/checkout", requireAuth, async (req, res) => {
       coins: z.number().int().positive(),
     })
     .parse(req.body);
-  if (!(await PaymentOrder.exists({ userId: id(req.user), requestKey: input.requestKey, packageId })))
-    throw new HttpError(410, "Fixed-package purchases have been replaced. Reopen the coin store to choose your amount.");
+  if (
+    !(await PaymentOrder.exists({
+      userId: id(req.user),
+      requestKey: input.requestKey,
+      packageId,
+    }))
+  )
+    throw new HttpError(
+      410,
+      "Fixed-package purchases have been replaced. Reopen the coin store to choose your amount.",
+    );
   if (gatewayIssues().length)
     throw new HttpError(
       503,
@@ -309,16 +346,48 @@ gatewayCallbacks.all("/return/:ref", async (req, res) => {
   res.redirect(303, `${config.origin}/purchase/${order._id}`);
 });
 economyAdmin.use(allow("SUPER_ADMIN"));
-economyAdmin.get("/store-pricing", async (_req, res) => res.json(await storePricing()));
+economyAdmin.get("/store-pricing", async (_req, res) =>
+  res.json(await storePricing()),
+);
 economyAdmin.put("/store-pricing", async (req, res) => {
-  const data = z.object({ coinsPerUsd: z.number().int().min(1).max(10000), expectedVersion: z.number().int().min(1), confirmed: z.literal(true), reason: z.string().trim().min(10).max(500) }).parse(req.body);
+  const data = z
+    .object({
+      coinsPerUsd: z.number().int().min(1).max(10000),
+      expectedVersion: z.number().int().min(1),
+      confirmed: z.literal(true),
+      reason: z.string().trim().min(10).max(500),
+    })
+    .parse(req.body);
   await atomic(async (session) => {
-    const row = await Settings.findOne({ key: "coin-store-pricing-v2" }).session(session);
+    const row = await Settings.findOne({
+      key: "coin-store-pricing-v2",
+    }).session(session);
     const before = row?.value || { coinsPerUsd: 20, version: 1 };
-    if (before.version !== data.expectedVersion) throw new HttpError(409, "Store pricing changed. Refresh before editing.");
-    const value = { coinsPerUsd: data.coinsPerUsd, version: before.version + 1 };
-    await Settings.updateOne({ key: "coin-store-pricing-v2" }, { $set: { value } }, { upsert: true, session });
-    await Audit.create([{ actorId: id(req.user), action: "store.pricing_updated", targetId: "coin-store-pricing-v2", details: { before, after: value, reason: data.reason } }], { session });
+    if (before.version !== data.expectedVersion)
+      throw new HttpError(
+        409,
+        "Store pricing changed. Refresh before editing.",
+      );
+    const value = {
+      coinsPerUsd: data.coinsPerUsd,
+      version: before.version + 1,
+    };
+    await Settings.updateOne(
+      { key: "coin-store-pricing-v2" },
+      { $set: { value } },
+      { upsert: true, session },
+    );
+    await Audit.create(
+      [
+        {
+          actorId: id(req.user),
+          action: "store.pricing_updated",
+          targetId: "coin-store-pricing-v2",
+          details: { before, after: value, reason: data.reason },
+        },
+      ],
+      { session },
+    );
   });
   res.json(await storePricing());
 });
@@ -501,7 +570,7 @@ economyAdmin.get("/pricing/:kind", async (req, res) => {
       category: p.category,
       difficulty: p.difficulty,
       questionCount: p.questions?.length,
-      pricing: getPricing(p),
+      pricing: kind === "quiz" ? getQuizPricing(p) : getPricing(p),
       draft: p.pricingDraft,
       tournamentId: p.tournamentId,
     })),

@@ -13,6 +13,7 @@ import {
 } from "../lib";
 import { Gate } from "./Player";
 import { QuestionBank } from "./Organizer";
+import AdminQuizManagement from "../components/AdminQuizManagement";
 import {
   EconomyAdmin,
   EconomyDashboard,
@@ -29,7 +30,24 @@ export function Admin() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const section = params.get("section") || "Overview";
-  const tab = ["Overview", "Users", "Quizzes", "Competitions", "Tournaments", "Organizers", "Admin Management", "Question Bank", "Categories", "Reports", "Audit logs", "Plans", "Settings", ...economySections].includes(section) ? section : "Overview";
+  const tab = [
+    "Overview",
+    "Users",
+    "Quizzes",
+    "Competitions",
+    "Tournaments",
+    "Organizers",
+    "Admin Management",
+    "Question Bank",
+    "Categories",
+    "Reports",
+    "Audit logs",
+    "Plans",
+    "Settings",
+    ...economySections,
+  ].includes(section)
+    ? section
+    : "Overview";
   const economyTab = economySections.includes(tab);
   const resource: Record<string, string> = {
     Overview: "overview",
@@ -50,7 +68,7 @@ export function Admin() {
   const { data, isPending, error } = useQuery({
     queryKey: ["admin", tab, search],
     queryFn: () => api(`/admin/${resource[tab]}`),
-    enabled: can && !economyTab,
+    enabled: can && !economyTab && tab !== "Quizzes",
   });
   if (!user) return <Gate title="A little oversight. A better platform." />;
   if (!can)
@@ -95,36 +113,66 @@ export function Admin() {
       </div>
       <div className="admin-navigation">
         <div className="admin-quick-links">
-        {["Overview", "Quizzes", "Users", "Payments"].map((t) => (
-          <button
-            key={t}
-            className={`btn ${tab === t ? "primary" : "outline"}`}
-            onClick={() => {
-              setParams({ section: t });
+          {["Overview", "Quizzes", "Users", "Payments"].map((t) => (
+            <button
+              key={t}
+              className={`btn ${tab === t ? "primary" : "outline"}`}
+              onClick={() => {
+                setParams({ section: t });
+                setErr("");
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <label>
+          Admin section
+          <select
+            value={tab}
+            onChange={(e) => {
+              setParams({ section: e.target.value });
               setErr("");
             }}
           >
-            {t}
-          </button>
-        ))}
-        </div>
-        <label>Admin section
-          <select value={tab} onChange={(e) => { setParams({ section: e.target.value }); setErr(""); }}>
             {[
               ["Overview", ["Overview", "Analytics"]],
               ["Content", ["Quizzes", "Question Bank", "Categories"]],
               ["People", ["Users", "Organizers", "Admin Management"]],
-              ["Coin economy", ["Wallets & Coins", "Coin Packages", "Quiz Pricing"]],
-              ["Events", ["Competitions", "Competition Pricing", "Tournaments", "Tournament Pricing"]],
+              [
+                "Coin economy",
+                ["Wallets & Coins", "Coin Packages", "Quiz Pricing"],
+              ],
+              [
+                "Events",
+                [
+                  "Competitions",
+                  "Competition Pricing",
+                  "Tournaments",
+                  "Tournament Pricing",
+                ],
+              ],
               ["Payments", ["Payments", "Pending Recovery"]],
               ["Platform", ["Reports", "Audit logs", "Plans", "Settings"]],
-            ].map(([label, sections]) => <optgroup key={label as string} label={label as string}>{(sections as string[]).filter((section) => Object.hasOwn(resource, section)).map((section) => <option key={section} value={section}>{section === "Coin Packages" ? "Store pricing" : section}</option>)}</optgroup>)}
+            ].map(([label, sections]) => (
+              <optgroup key={label as string} label={label as string}>
+                {(sections as string[])
+                  .filter((section) => Object.hasOwn(resource, section))
+                  .map((section) => (
+                    <option key={section} value={section}>
+                      {section === "Coin Packages" ? "Store pricing" : section}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
           </select>
         </label>
       </div>
       {err && !action && <ErrorNote message={err} />}{" "}
       {economyTab ? (
         <EconomyAdmin section={tab} />
+      ) : tab === "Quizzes" ? (
+        <AdminQuizManagement />
       ) : isPending ? (
         <Spinner />
       ) : error ? (
@@ -158,8 +206,8 @@ export function Admin() {
               <div className="info-note">
                 <Icon name="Shield" size={20} />
                 <p>
-                  Billing is disabled. No payments are collected. Administrative
-                  actions are recorded in the audit log.
+                  Payments require a verified merchant connection.
+                  Administrative actions are recorded in the audit log.
                 </p>
               </div>
             </>
@@ -225,50 +273,6 @@ export function Admin() {
                 </table>
               </div>
             </>
-          )}
-          {tab === "Quizzes" && (
-            <div className="panel table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Quiz</th>
-                    <th>Status</th>
-                    <th>Category</th>
-                    <th>Owner</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {data?.items.map((q: any) => (
-                    <tr key={q.id}>
-                      <td>
-                        <b>{q.title}</b>
-                        <small>{q.questionCount} questions</small>
-                      </td>
-                      <td>
-                        <span className="badge">{q.status}</span>
-                      </td>
-                      <td>{q.category}</td>
-                      <td>
-                        <code>
-                          {q.ownerId === "platform"
-                            ? "Platform seed"
-                            : q.ownerId.slice(-8)}
-                        </code>
-                      </td>
-                      <td>
-                        <button
-                          className="text-btn"
-                          onClick={() => setAction({ type: "quiz", item: q })}
-                        >
-                          Review content <Icon name="ArrowUpRight" size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           )}
           {tab === "Question Bank" && (
             <QuestionBank
@@ -690,4 +694,3 @@ export function Admin() {
     </>
   );
 }
-

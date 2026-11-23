@@ -112,6 +112,7 @@ export const Attempt = make(
     entitlementId: String,
   },
   [
+    [{ quizId: 1, status: 1, userId: 1 }, {}],
     [
       { userId: 1, quizId: 1 },
       { unique: true, partialFilterExpression: { status: "active" } },
