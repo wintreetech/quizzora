@@ -47,9 +47,13 @@ test("discovery search, filters, bookmarks, mobile drawer, and themes", async ({
   await page
     .getByRole("button", { name: "Save Think you speak tech?" })
     .click();
-  await page.getByRole("link", { name: "Saved quizzes", exact: true }).click();
+  await page
+    .locator(".sidebar")
+    .getByRole("link", { name: "Saved quizzes", exact: true })
+    .click();
   await expect(page.locator(".quiz-card")).toHaveCount(1);
   await page
+    .locator(".sidebar")
     .getByRole("link", { name: "Explore quizzes", exact: true })
     .click();
   await page.getByLabel("Search quizzes").fill("cinema");
@@ -99,7 +103,10 @@ test("adult registration, quiz scoring, explanations, history, achievements, and
   await expect(page.locator(".review-content").first()).toContainText(
     "Ganymede",
   );
-  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await page
+    .locator(".sidebar")
+    .getByRole("link", { name: "Dashboard", exact: true })
+    .click();
   await expect(page.locator(".stat-card").first()).toContainText("1");
   await expect(page.locator(".activity-preview")).toContainText(
     "The universe is calling",
@@ -121,7 +128,10 @@ test("adult registration, quiz scoring, explanations, history, achievements, and
         fullPage: true,
       });
   }
-  await page.getByRole("link", { name: "My activity", exact: true }).click();
+  await page
+    .locator(".sidebar")
+    .getByRole("link", { name: "My activity", exact: true })
+    .click();
   await expect(page.locator("table")).toContainText("The universe is calling");
   await page.getByRole("link", { name: "Achievements", exact: true }).click();
   await expect(page.locator(".achievement-card.earned")).toHaveCount(2);
@@ -753,7 +763,10 @@ test("public instructions, expanded categories, saved quizzes beyond page one an
   await page
     .getByRole("button", { name: `Save ${target}`, exact: true })
     .click();
-  await page.getByRole("link", { name: "Saved quizzes", exact: true }).click();
+  await page
+    .locator(".sidebar")
+    .getByRole("link", { name: "Saved quizzes", exact: true })
+    .click();
   await expect(page.locator(".quiz-card")).toHaveCount(1);
   await expect(page.locator(".quiz-card")).toContainText(target);
   await page.getByRole("link", { name: target, exact: true }).click();
@@ -1105,7 +1118,10 @@ test("Admin creates a category, publishes a paid quiz and changes its price thro
   await expect(dialog).not.toBeVisible();
   await expect(row).toContainText("85 coins");
   await page.locator("h1").click();
-  const dismiss = page.getByRole("button", { name: "Dismiss notification", exact: true });
+  const dismiss = page.getByRole("button", {
+    name: "Dismiss notification",
+    exact: true,
+  });
   if (await dismiss.isVisible()) await dismiss.click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
@@ -1125,13 +1141,25 @@ test("Admin creates a category, publishes a paid quiz and changes its price thro
   await expect(page.locator(".quiz-access-panel")).toContainText("85 coins");
   for (const status of ["draft", "published"]) {
     await page.goto("/admin?section=Quizzes");
-    await page.getByLabel("Search managed quizzes").fill("Architecture: a fresh perspective");
-    await row.getByRole("button", { name: "Review content", exact: true }).click();
-    await dialog.getByRole("combobox", { name: "Publication status", exact: true }).selectOption(status);
-    await dialog.getByLabel("Reason for this change").fill("Verified client publication workflow");
-    await dialog.getByRole("button", { name: "Save publication", exact: true }).click();
+    await page
+      .getByLabel("Search managed quizzes")
+      .fill("Architecture: a fresh perspective");
+    await row
+      .getByRole("button", { name: "Review content", exact: true })
+      .click();
+    await dialog
+      .getByRole("combobox", { name: "Publication status", exact: true })
+      .selectOption(status);
+    await dialog
+      .getByLabel("Reason for this change")
+      .fill("Verified client publication workflow");
+    await dialog
+      .getByRole("button", { name: "Save publication", exact: true })
+      .click();
     await expect(dialog).not.toBeVisible();
     await page.goto("/?category=Architecture&tab=paid");
-    await expect(page.locator(".quiz-card")).toHaveCount(status === "draft" ? 0 : 1);
+    await expect(page.locator(".quiz-card")).toHaveCount(
+      status === "draft" ? 0 : 1,
+    );
   }
 });

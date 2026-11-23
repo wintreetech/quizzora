@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api, Icon, useApp, Spinner, ErrorNote } from "../lib";
+import PolicyInformation, {
+  PolicyNavigation,
+} from "../components/PolicyInformation";
 export function Pricing() {
   const { user, auth } = useApp();
   const { data, isPending, error } = useQuery({
@@ -216,7 +219,9 @@ export function Help() {
           Take the product tour
         </button>
         <p>A little help, so you can get back to the good questions.</p>
-        <Link to="/how-it-works" className="text-btn">Read How Quizora Works</Link>
+        <Link to="/how-it-works" className="text-btn">
+          Read How Quizora Works
+        </Link>
         <label className="help-search">
           <Icon name="Search" size={19} />
           <input
@@ -266,14 +271,14 @@ export function Help() {
 }
 export function Legal() {
   const { type } = useParams();
+  if (type === "refunds" || type === "cookies")
+    return <PolicyInformation type={type} />;
+  if (type !== "privacy" && type !== "terms") return <NotFound />;
   return (
     <article className="legal-page panel">
+      <PolicyNavigation current={type} />
       <span className="eyebrow">CLEAR EXPECTATIONS. GOOD COMPANY.</span>
-      <h1>
-        {type === "privacy"
-          ? "Your curiosity. Your privacy."
-          : "A fair place to play."}
-      </h1>
+      <h1>{type === "privacy" ? "Privacy policy" : "Terms & conditions"}</h1>
       <p className="info-note">
         Pre-launch policy draft. Operator details, support contact,
         jurisdiction, and retention periods must be completed before public

@@ -47,6 +47,7 @@ import "./coin-builder.css";
 import "./client-polish.css";
 import "./premium.css";
 import "./player-workspace.css";
+import "./footer.css";
 import HowQuizoraWorks from "./pages/HowItWorks";
 import { PlayerHome, PlayerActivity } from "./pages/PlayerHome";
 document.documentElement.dataset.theme =

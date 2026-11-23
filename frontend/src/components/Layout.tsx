@@ -10,6 +10,7 @@ import { Icon, useApp, api, useTitle } from "../lib";
 import type { icons } from "../lib";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet, CoinSymbol, coinNumber } from "../pages/Economy";
+import AppFooter from "./AppFooter";
 const links: {
   to: string;
   label: string;
@@ -82,33 +83,41 @@ export default function Layout() {
           icon: icon as keyof typeof icons,
         }))
       : links;
-  const title = location.pathname.startsWith("/organizer")
-    ? "Creator studio"
-    : location.pathname.startsWith("/admin")
-      ? "Platform administration"
-      : location.pathname === "/hosting"
-        ? "Hosting plans"
-        : ["/store", "/pricing"].includes(location.pathname)
-          ? "Coin store"
-          : location.pathname === "/wallet"
-            ? "Your wallet"
-            : location.pathname.startsWith("/purchase/")
-              ? "Purchase status"
-              : location.pathname.startsWith("/live")
-                ? "Live competitions"
-                : location.pathname === "/dashboard"
-                  ? "Dashboard"
-                  : location.pathname === "/activity"
-                    ? "My activity"
-                    : location.pathname === "/library"
-                      ? "Your collection"
-                      : location.pathname === "/leaderboard"
-                        ? "Leaderboard"
-                        : location.pathname === "/settings"
-                          ? "Account settings"
-                          : location.pathname === "/tournaments"
-                            ? "Tournaments"
-                            : "Explore quizzes";
+  const legalTitles: Record<string, string> = {
+    terms: "Terms & conditions",
+    privacy: "Privacy policy",
+    refunds: "Refund policy",
+    cookies: "Cookies & storage",
+  };
+  const title = location.pathname.startsWith("/legal/")
+    ? legalTitles[location.pathname.split("/")[2]] || "Legal information"
+    : location.pathname.startsWith("/organizer")
+      ? "Creator studio"
+      : location.pathname.startsWith("/admin")
+        ? "Platform administration"
+        : location.pathname === "/hosting"
+          ? "Hosting plans"
+          : ["/store", "/pricing"].includes(location.pathname)
+            ? "Coin store"
+            : location.pathname === "/wallet"
+              ? "Your wallet"
+              : location.pathname.startsWith("/purchase/")
+                ? "Purchase status"
+                : location.pathname.startsWith("/live")
+                  ? "Live competitions"
+                  : location.pathname === "/dashboard"
+                    ? "Dashboard"
+                    : location.pathname === "/activity"
+                      ? "My activity"
+                      : location.pathname === "/library"
+                        ? "Your collection"
+                        : location.pathname === "/leaderboard"
+                          ? "Leaderboard"
+                          : location.pathname === "/settings"
+                            ? "Account settings"
+                            : location.pathname === "/tournaments"
+                              ? "Tournaments"
+                              : "Explore quizzes";
   useTitle(title);
   useEffect(() => {
     setMobile(false);
@@ -455,20 +464,7 @@ export default function Layout() {
         <main className="page-content" id="main-content">
           <Outlet />
         </main>
-        <footer className="app-footer">
-          <Link to="/" className="footer-logo">
-            quizora<span>✦</span>
-          </Link>
-          <span>Knowledge earns the score. Coins unlock access.</span>
-          <div>
-            <Link to="/store">Coin store</Link>
-            <Link to="/how-it-works">How it works</Link>
-            <Link to="/help">Help</Link>
-            <Link to="/legal/privacy">Privacy</Link>
-            <Link to="/legal/terms">Terms</Link>
-            <span className="age-badge">18+</span>
-          </div>
-        </footer>
+        <AppFooter />
       </div>
     </div>
   );
